@@ -48,13 +48,13 @@ export function CTASection() {
               </p>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Link href="/analysis" legacyBehavior>
-                  <a>
-                    <Button size="lg" className="text-lg px-8 py-6 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-500 hover:via-pink-500 hover:to-purple-500 text-white border-0 animate-gradient group">
-                      Start Analysis Now
-                      <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </Button>
-                  </a>
+                <Link href="/analysis">
+
+                  <Button size="lg" className="text-lg px-8 py-6 bg-gradient-to-r from-purple-600 via-pink-600 to-purple-600 hover:from-purple-500 hover:via-pink-500 hover:to-purple-500 text-white border-0 animate-gradient group">
+                    Start Analysis Now
+                    <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+
                 </Link>
                 <Link href="/csv-upload">
                   <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-cyan-500/50 text-foreground hover:bg-cyan-500/10">
@@ -97,5 +97,5 @@ export function CTASection() {
         </motion.footer>
       </div>
     </section>
-  )
+  );
 }

@@ -127,12 +127,12 @@ export function Navigation() {
         </div>
 
         <div className="hidden md:flex items-center gap-3">
-          <Link href="/analysis" legacyBehavior>
-            <a>
-              <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
-                Start Analysis
-              </Button>
-            </a>
+          <Link href="/analysis">
+
+            <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
+              Start Analysis
+            </Button>
+
           </Link>
         </div>
 
@@ -143,7 +143,6 @@ export function Navigation() {
           {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
       </div>
-
       {isMobileMenuOpen && (
         <div className="md:hidden glass mt-2 mx-4 rounded-xl p-6">
           <div className="flex flex-col gap-4">
@@ -165,16 +164,16 @@ export function Navigation() {
             <Link href="/sessions" className="text-muted-foreground hover:text-foreground transition-colors">
               Sessions
             </Link>
-            <Link href="/analysis" legacyBehavior>
-              <a>
-                <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
-                  Start Analysis
-                </Button>
-              </a>
+            <Link href="/analysis">
+
+              <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
+                Start Analysis
+              </Button>
+
             </Link>
           </div>
         </div>
       )}
     </nav>
-  )
+  );
 }
