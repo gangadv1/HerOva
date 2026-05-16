@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import Link from "next/link"
 import Logo from "@/components/branding/logo"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Sparkles, Activity, Brain } from "lucide-react"
+import { ArrowRight, Sparkles, Activity, Brain, Upload, ClipboardList } from "lucide-react"
 
 export function HeroSection() {
   return (
@@ -76,6 +76,18 @@ export function HeroSection() {
             <Link href="#technology">
               <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-purple-500/50 text-foreground hover:bg-purple-500/10">
                 Learn More
+              </Button>
+            </Link>
+            <Link href="/csv-upload">
+              <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-cyan-500/50 text-foreground hover:bg-cyan-500/10">
+                <Upload className="mr-2 w-5 h-5" />
+                Batch Upload
+              </Button>
+            </Link>
+            <Link href="/sessions">
+              <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-pink-500/50 text-foreground hover:bg-pink-500/10">
+                <ClipboardList className="mr-2 w-5 h-5" />
+                Sessions
               </Button>
             </Link>
           </motion.div>

@@ -105,22 +105,28 @@ export function Navigation() {
           <span className="sr-only">HerOva</span>
         </Link>
 
-        <div className="hidden md:flex items-center gap-8">
-          <Link href="#problem" className="text-muted-foreground hover:text-foreground transition-colors">
+        <div className="hidden md:flex items-center gap-6">
+          <Link href="#problem" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
             Problem
           </Link>
-          <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Link href="#features" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
             Features
           </Link>
-          <Link href="#technology" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Link href="#technology" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
             Technology
           </Link>
-          <Link href="#datasets" className="text-muted-foreground hover:text-foreground transition-colors">
+          <Link href="#datasets" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
             Datasets
+          </Link>
+          <Link href="/csv-upload" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
+            Batch Upload
+          </Link>
+          <Link href="/sessions" className="text-muted-foreground hover:text-foreground transition-colors text-sm">
+            Sessions
           </Link>
         </div>
 
-        <div className="hidden md:flex items-center gap-4">
+        <div className="hidden md:flex items-center gap-3">
           <Link href="/analysis" legacyBehavior>
             <a>
               <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
@@ -152,6 +158,12 @@ export function Navigation() {
             </Link>
             <Link href="#datasets" className="text-muted-foreground hover:text-foreground transition-colors">
               Datasets
+            </Link>
+            <Link href="/csv-upload" className="text-muted-foreground hover:text-foreground transition-colors">
+              Batch Upload
+            </Link>
+            <Link href="/sessions" className="text-muted-foreground hover:text-foreground transition-colors">
+              Sessions
             </Link>
             <Link href="/analysis" legacyBehavior>
               <a>

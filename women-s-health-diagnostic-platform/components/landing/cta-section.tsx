@@ -3,7 +3,7 @@
 import { motion } from "framer-motion"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Sparkles } from "lucide-react"
+import { ArrowRight, Sparkles, Upload, ClipboardList } from "lucide-react"
 import Logo from "@/components/branding/logo"
 
 export function CTASection() {
@@ -55,6 +55,18 @@ export function CTASection() {
                       <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </a>
+                </Link>
+                <Link href="/csv-upload">
+                  <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-cyan-500/50 text-foreground hover:bg-cyan-500/10">
+                    <Upload className="mr-2 w-5 h-5" />
+                    Batch Upload
+                  </Button>
+                </Link>
+                <Link href="/sessions">
+                  <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-pink-500/50 text-foreground hover:bg-pink-500/10">
+                    <ClipboardList className="mr-2 w-5 h-5" />
+                    View Sessions
+                  </Button>
                 </Link>
               </div>
 
