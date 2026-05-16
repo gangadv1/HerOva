@@ -13,7 +13,9 @@ function getEnvVar(keys: string[]): string {
 }
 
 const SUPABASE_URL = getEnvVar(["NEXT_PUBLIC_SUPABASE_URL", "VITE_SUPABASE_URL"]);
-const SUPABASE_ANON_KEY = getEnvVar(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_SUPABASE_ANON_KEY"]);
+const SUPABASE_ANON_KEY = getEnvVar(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
+
+const USE_MOCK = !SUPABASE_URL && typeof process !== "undefined" && process.env.NODE_ENV === "development";
 
 function getHeaders(): Record<string, string> {
   return {
@@ -24,6 +26,10 @@ function getHeaders(): Record<string, string> {
 }
 
 async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
+  if (!SUPABASE_URL) {
+    throw new Error("SUPABASE_URL is not set. Please set NEXT_PUBLIC_SUPABASE_URL in your environment.");
+  }
+
   const response = await fetch(`${SUPABASE_URL}/functions/v1/${endpoint}`, {
     method: "POST",
     headers: getHeaders(),
@@ -208,7 +214,9 @@ export interface SessionResult {
 
 export const healthApi = {
   predict: (data: Record<string, unknown>) =>
-    apiCall<PredictionResult>("predict", data),
+    USE_MOCK
+      ? Promise.resolve({ success: true, pcosRiskScore: 12, riskLevel: "low", phenotype: { type: "NA", name: "Non-PCOS", description: "Mock result" }, contributingFactors: [], confidenceMetrics: { pcosClassification: 0.9, phenotypeMatch: 0.8, dataQuality: 0.9 }, recommendations: [], timestamp: new Date().toISOString() } as PredictionResult)
+      : apiCall<PredictionResult>("predict", data),
 
   shap: (data: Record<string, unknown>) =>
     apiCall<SHAPResult>("shap", data),
@@ -217,7 +225,18 @@ export const healthApi = {
     apiCall<ClusterResult>("cluster", data),
 
   analyze: (data: Record<string, unknown>) =>
-    apiCall<FullAnalysisResult>("analyze", data),
+    USE_MOCK
+      ? Promise.resolve({
+          success: true,
+          prediction: { pcosRiskScore: 42, riskLevel: "moderate", contributingFactors: ["Irregular periods", "Elevated AMH"] },
+          phenotype: { type: "C", name: "Ovulatory PCOS", description: "Mock phenotype description" },
+          shap: { values: [{ name: "AMH", value: 0.8, impact: "high", direction: "positive", explanation: "Higher AMH increases PCOS risk" }], topContributors: [{ feature: "AMH", contribution: 0.8, impact: "high", direction: "positive", explanation: "Top contributor" }] },
+          clustering: { assignedCluster: { id: 1, name: "Cluster A", description: "Mock cluster", characteristics: ["feature1"], riskProfile: "moderate", metabolicRisk: "moderate" }, allClusters: [] },
+          confidenceMetrics: { pcosClassification: 0.85, phenotypeMatch: 0.7, dataQuality: 0.95 },
+          recommendations: ["Refer to endocrinology"],
+          timestamp: new Date().toISOString(),
+        } as FullAnalysisResult)
+      : apiCall<FullAnalysisResult>("analyze", data),
 
   csvUpload: async (file: File): Promise<CSVUploadResult> => {
     const formData = new FormData();
@@ -245,21 +264,33 @@ export const healthApi = {
 
   session: {
     create: (patientData: Record<string, unknown>, csvData?: unknown) =>
-      apiCall<SessionResult>("session", { action: "create", patientData, csvData }),
+      USE_MOCK
+        ? Promise.resolve({ success: true, session: { id: "mock-session-1", created_at: new Date().toISOString(), patient_data: patientData, csv_data: csvData, status: "created" } } as SessionResult)
+        : apiCall<SessionResult>("session", { action: "create", patientData, csvData }),
 
     get: (sessionId: string) =>
-      apiCall<SessionResult>("session", { action: "get", sessionId }),
+      USE_MOCK
+        ? Promise.resolve({ success: true, session: { id: sessionId, created_at: new Date().toISOString(), patient_data: {}, status: "created" } } as SessionResult)
+        : apiCall<SessionResult>("session", { action: "get", sessionId }),
 
     update: (sessionId: string, updates: { patientData?: Record<string, unknown>; csvData?: unknown; status?: string }) =>
-      apiCall<SessionResult>("session", { action: "update", sessionId, ...updates }),
+      USE_MOCK
+        ? Promise.resolve({ success: true, session: { id: sessionId, created_at: new Date().toISOString(), patient_data: updates.patientData || {}, csv_data: updates.csvData, status: updates.status || "updated" } } as SessionResult)
+        : apiCall<SessionResult>("session", { action: "update", sessionId, ...updates }),
 
     saveResult: (sessionId: string, result: Record<string, unknown>) =>
-      apiCall<SessionResult>("session", { action: "save-result", sessionId, ...result }),
+      USE_MOCK
+        ? Promise.resolve({ success: true, session: { id: sessionId, created_at: new Date().toISOString(), patient_data: {}, status: "saved" }, result } as SessionResult)
+        : apiCall<SessionResult>("session", { action: "save-result", sessionId, ...result }),
 
     list: () =>
-      apiCall<SessionResult>("session", { action: "list" }),
+      USE_MOCK
+        ? Promise.resolve({ success: true, sessions: [{ id: "mock-session-1", created_at: new Date().toISOString(), patient_data: {}, status: "created" }] } as SessionResult)
+        : apiCall<SessionResult>("session", { action: "list" }),
 
     getResults: (sessionId: string) =>
-      apiCall<SessionResult>("session", { action: "get-results", sessionId }),
+      USE_MOCK
+        ? Promise.resolve({ success: true, results: [ { pcos_risk_score: 42, phenotype: "Ovulatory PCOS", phenotype_name: "Ovulatory", phenotype_description: "Mock" , contributing_factors: ["AMH"] } ] } as SessionResult)
+        : apiCall<SessionResult>("session", { action: "get-results", sessionId }),
   },
 };
