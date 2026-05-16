@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="64" viewBox="0 0 320 64">
+  <defs>
+    <linearGradient id="logo-left-wing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ede9fe" />
+      <stop offset="55%" stop-color="#8b5cf6" />
+      <stop offset="100%" stop-color="#6d28d9" />
+    </linearGradient>
+    <linearGradient id="logo-right-wing" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffe4ec" />
+      <stop offset="55%" stop-color="#fb7185" />
+      <stop offset="100%" stop-color="#e11d48" />
+    </linearGradient>
+  </defs>
+
+  <!-- icon on the left -->
+  <g transform="translate(12 4) scale(1.1)">
+    <g transform="translate(4 8) rotate(-18 18 12)">
+      <path d="M18 12C12 7 7 7 5 10c-2 3 0 8 5 10 5 2 9 0 11-4Z" fill="url(#logo-left-wing)" stroke="rgba(0,0,0,0.06)" stroke-width="0.6" />
+      <path d="M18 13C11 15 7 19 7 23c0 3 3 5 6 4 4-1 7-5 5-14Z" fill="url(#logo-left-wing)" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" />
+    </g>
+    <g transform="translate(40 8) scale(-1 1) rotate(-18 18 12)">
+      <path d="M18 12C12 7 7 7 5 10c-2 3 0 8 5 10 5 2 9 0 11-4Z" fill="url(#logo-right-wing)" stroke="rgba(0,0,0,0.06)" stroke-width="0.6" />
+      <path d="M18 13C11 15 7 19 7 23c0 3 3 5 6 4 4-1 7-5 5-14Z" fill="url(#logo-right-wing)" stroke="rgba(0,0,0,0.05)" stroke-width="0.5" />
+    </g>
+    <g transform="translate(32 43)">
+      <ellipse cx="0" cy="-10" rx="3.8" ry="5.6" transform="rotate(0 0 -10)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <ellipse cx="8" cy="-6" rx="3.8" ry="5.6" transform="rotate(45 8 -6)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <ellipse cx="10" cy="2" rx="3.8" ry="5.6" transform="rotate(90 10 2)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <ellipse cx="6" cy="9" rx="3.8" ry="5.6" transform="rotate(135 6 9)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <ellipse cx="0" cy="11" rx="3.8" ry="5.6" transform="rotate(180 0 11)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <ellipse cx="-6" cy="9" rx="3.8" ry="5.6" transform="rotate(225 -6 9)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <ellipse cx="-10" cy="2" rx="3.8" ry="5.6" transform="rotate(270 -10 2)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <ellipse cx="-8" cy="-6" rx="3.8" ry="5.6" transform="rotate(315 -8 -6)" fill="#ffffff" stroke="rgba(0,0,0,0.06)" stroke-width="0.45" />
+      <circle cx="0" cy="0" r="3.8" fill="#facc15" stroke="rgba(0,0,0,0.06)" stroke-width="0.5" />
+      <circle cx="0" cy="0" r="1.5" fill="#ffffff" />
+    </g>
+  </g>
+
+  <!-- text -->
+  <text x="100" y="40" font-family="Inter, system-ui, Arial, sans-serif" font-size="22" font-weight="700" fill="#111827">HerOva</text>
+</svg>
