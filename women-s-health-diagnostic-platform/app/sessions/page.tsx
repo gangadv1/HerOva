@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import Logo from "@/components/branding/logo"
@@ -24,11 +24,7 @@ export default function SessionsPage() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [sessionResults, setSessionResults] = useState<Record<string, unknown>[]>([])
 
-  useEffect(() => {
-    fetchSessions()
-  }, [])
-
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -39,7 +35,33 @@ export default function SessionsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    void healthApi.session
+      .list()
+      .then((res) => {
+        if (!cancelled) {
+          setSessions(res.sessions || [])
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Failed to load sessions")
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const handleViewResults = async (sessionId: string) => {
     if (selectedSession === sessionId) {

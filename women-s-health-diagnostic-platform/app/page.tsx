@@ -1,3 +1,4 @@
+/*
 import { HeroSection } from "@/components/landing/hero-section"
 import { FeaturesSection } from "@/components/landing/features-section"
 import { ProblemSection } from "@/components/landing/problem-section"
@@ -22,4 +23,14 @@ export default function Home() {
       <CTASection />
     </main>
   )
+}*/
+
+export default function Home() {
+  return (
+    <main style={{ padding: "40px" }}>
+      <h1>HEROVA IS LIVE</h1>
+      <p>Women&apos;s Health Diagnostic Platform</p>
+    </main>
+  )
 }
+

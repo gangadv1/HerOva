@@ -63,6 +63,11 @@ const cellTypes = [
   { name: "Endothelial Cells", count: 1156, color: "green", description: "Blood vessel lining cells" },
 ]
 
+function seededNoise(seed: number) {
+  const value = Math.sin(seed) * 10000
+  return value - Math.floor(value)
+}
+
 export function MolecularInsights() {
   const [selectedPathway, setSelectedPathway] = useState(pathways[0])
 
@@ -125,12 +130,12 @@ export function MolecularInsights() {
                 <svg viewBox="0 0 400 400" className="w-full h-full">
                   {/* Generate cluster points */}
                   {cellTypes.map((cellType, typeIndex) => {
-                    const centerX = 100 + (typeIndex % 3) * 100 + Math.random() * 50
-                    const centerY = 100 + Math.floor(typeIndex / 2) * 120 + Math.random() * 50
+                    const centerX = 100 + (typeIndex % 3) * 100 + seededNoise(typeIndex + 1) * 50
+                    const centerY = 100 + Math.floor(typeIndex / 2) * 120 + seededNoise(typeIndex + 11) * 50
                     
                     return Array.from({ length: 40 }).map((_, i) => {
-                      const angle = Math.random() * Math.PI * 2
-                      const radius = Math.random() * 50
+                      const angle = seededNoise(typeIndex * 100 + i + 1) * Math.PI * 2
+                      const radius = seededNoise(typeIndex * 100 + i + 51) * 50
                       const x = centerX + Math.cos(angle) * radius
                       const y = centerY + Math.sin(angle) * radius
                       
