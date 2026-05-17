@@ -212,6 +212,36 @@ function buildPhenotype(data: Partial<PatientInput>) {
   return { type: "NA", name: "Non-PCOS" };
 }
 
+function getTriggeredColumns(row: Record<string, unknown>, patient: Partial<PatientInput>) {
+  const columns: string[] = [];
+  const addIf = (condition: boolean, label: string) => {
+    if (condition) columns.push(label);
+  };
+  const get = (keys: string[]): unknown => {
+    for (const key of keys) {
+      if (row[key] !== undefined && row[key] !== "") return row[key];
+    }
+    return "";
+  };
+
+  addIf(!!patient.irregularPeriods, `Cycle(R/I)=${get(["Cycle(R/I)", "Irregular_Periods", "irregular_periods"])}`);
+  addIf(!!(patient as { weightGain?: boolean }).weightGain, `Weight gain(Y/N)=${get(["Weight gain(Y/N)", "Weight_Gain", "weight_gain"])}`);
+  addIf(!!patient.hirsutism, `hair growth(Y/N)=${get(["hair growth(Y/N)", "Hirsutism", "hirsutism"])}`);
+  addIf(!!patient.acne, `Pimples(Y/N)=${get(["Pimples(Y/N)", "Acne", "acne"])}`);
+  addIf(!!patient.skinDarkening, `Skin darkening (Y/N)=${get(["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"])}`);
+  addIf(!!patient.hairLoss, `Hair loss(Y/N)=${get(["Hair loss(Y/N)", "Hair_Loss", "hair_loss"])}`);
+  addIf(!!(patient as { fastFood?: boolean }).fastFood, `Fast food (Y/N)=${get(["Fast food (Y/N)", "fast_food"])}`);
+  addIf(!(patient as { regularExercise?: boolean }).regularExercise, `Reg.Exercise(Y/N)=${get(["Reg.Exercise(Y/N)", "regular_exercise"])}`);
+  addIf(!!patient.amh && patient.amh >= 4, `AMH(ng/mL)=${get(["AMH(ng/mL)", "AMH", "amh"])}`);
+  addIf(!!patient.lhFshRatio && patient.lhFshRatio >= 2, `FSH/LH=${get(["FSH/LH", "LH_FSH_Ratio", "lh_fsh_ratio"])}`);
+  addIf(!!patient.follicleCountLeft && patient.follicleCountLeft >= 12 || !!patient.follicleCountRight && patient.follicleCountRight >= 12, `Follicle No. (L/R)=${patient.follicleCountLeft}/${patient.follicleCountRight}`);
+  addIf(!!patient.bmi && patient.bmi >= 25, `BMI=${patient.bmi}`);
+  addIf(!!patient.waistHipRatio && patient.waistHipRatio > 0.85, `Waist:Hip Ratio=${patient.waistHipRatio}`);
+  addIf(!!patient.bloodPressureSystolic && !!patient.bloodPressureDiastolic && (patient.bloodPressureSystolic >= 130 || patient.bloodPressureDiastolic >= 85), `BP _Systolic/BP _Diastolic=${patient.bloodPressureSystolic}/${patient.bloodPressureDiastolic}`);
+
+  return columns;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200, headers: corsHeaders });
   try {
@@ -234,7 +264,7 @@ Deno.serve(async (req: Request) => {
       if (!mapped) return null;
       const risk = buildRisk(mapped);
       const phenotype = buildPhenotype(mapped);
-      return { rowId: index + 1, patientData: mapped, riskScore: risk.score, riskLevel: risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low", phenotype: phenotype.type, phenotypeName: phenotype.name, factors: risk.factors };
+      return { rowId: index + 1, patientData: mapped, riskScore: risk.score, riskLevel: risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low", phenotype: phenotype.type, phenotypeName: phenotype.name, factors: risk.factors, triggeredColumns: getTriggeredColumns(row, mapped) };
     }).filter(Boolean);
     const summary = {
       totalRows: rows.length, processedPatients: patients.length,

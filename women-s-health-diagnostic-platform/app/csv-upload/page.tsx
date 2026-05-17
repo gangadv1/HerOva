@@ -347,6 +347,7 @@ export default function CSVUploadPage() {
                         <th className="text-left p-3 text-muted-foreground font-medium">Risk Level</th>
                         <th className="text-left p-3 text-muted-foreground font-medium">Phenotype</th>
                         <th className="text-left p-3 text-muted-foreground font-medium">Key Factors</th>
+                        <th className="text-left p-3 text-muted-foreground font-medium">Triggered Columns</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -384,6 +385,18 @@ export default function CSVUploadPage() {
                               ))}
                               {patient.factors.length > 2 && (
                                 <span className="text-xs text-muted-foreground">+{patient.factors.length - 2}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-1">
+                              {patient.triggeredColumns.slice(0, 2).map((column) => (
+                                <span key={column} className="text-xs text-cyan-200 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded">
+                                  {column}
+                                </span>
+                              ))}
+                              {patient.triggeredColumns.length > 2 && (
+                                <span className="text-xs text-muted-foreground">+{patient.triggeredColumns.length - 2}</span>
                               )}
                             </div>
                           </td>

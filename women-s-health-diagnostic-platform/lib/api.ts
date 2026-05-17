@@ -147,6 +147,30 @@ function isIrregularCycleValue(value: string): boolean {
   return normalized === "i" || normalized === "irregular" || (Number.isFinite(numeric) && numeric >= 4);
 }
 
+function getTriggeredColumns(row: Record<string, string>, patient: ReturnType<typeof buildPatientFromUploadedRow>) {
+  const columns: string[] = [];
+  const addIf = (condition: boolean, label: string) => {
+    if (condition) columns.push(label);
+  };
+
+  addIf(patient.irregularPeriods, `Cycle(R/I)=${getField(row, ["Cycle(R/I)", "Irregular_Periods", "irregular_periods"], "")}`);
+  addIf(patient.weightGain, `Weight gain(Y/N)=${getField(row, ["Weight gain(Y/N)", "Weight_Gain", "weight_gain"], "")}`);
+  addIf(patient.hirsutism, `hair growth(Y/N)=${getField(row, ["hair growth(Y/N)", "Hirsutism", "hirsutism"], "")}`);
+  addIf(patient.acne, `Pimples(Y/N)=${getField(row, ["Pimples(Y/N)", "Acne", "acne"], "")}`);
+  addIf(patient.skinDarkening, `Skin darkening (Y/N)=${getField(row, ["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"], "")}`);
+  addIf(patient.hairLoss, `Hair loss(Y/N)=${getField(row, ["Hair loss(Y/N)", "Hair_Loss", "hair_loss"], "")}`);
+  addIf(patient.fastFood, `Fast food (Y/N)=${getField(row, ["Fast food (Y/N)", "fast_food"], "")}`);
+  addIf(!patient.regularExercise, `Reg.Exercise(Y/N)=${getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"], "")}`);
+  addIf(patient.amh >= 4, `AMH(ng/mL)=${getField(row, ["AMH(ng/mL)", "AMH", "amh"], "")}`);
+  addIf(patient.lhFshRatio >= 2, `FSH/LH=${getField(row, ["FSH/LH", "LH_FSH_Ratio", "lh_fsh_ratio"], "")}`);
+  addIf(patient.follicleCountLeft >= 12 || patient.follicleCountRight >= 12, `Follicle No. (L/R)=${patient.follicleCountLeft}/${patient.follicleCountRight}`);
+  addIf(patient.bmi >= 25, `BMI=${patient.bmi}`);
+  addIf(patient.waistHipRatio > 0.85, `Waist:Hip Ratio=${patient.waistHipRatio}`);
+  addIf(patient.bloodPressureSystolic >= 130 || patient.bloodPressureDiastolic >= 85, `BP _Systolic/BP _Diastolic=${patient.bloodPressureSystolic}/${patient.bloodPressureDiastolic}`);
+
+  return columns;
+}
+
 function buildPatientFromUploadedRow(row: Record<string, string>) {
   const weight = toNumber(getField(row, ["Weight (Kg)", "Weight", "weight"]));
   const height = toNumber(getField(row, ["Height(Cm)", "Height (Cm)", "Height", "height"]));
@@ -304,6 +328,7 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
     const patient = buildPatientFromUploadedRow(row);
     const risk = calculateLocalRisk(patient);
     const phenotype = determineLocalPhenotype(patient);
+    const triggeredColumns = getTriggeredColumns(row, patient);
 
     return {
       rowId: index + 1,
@@ -313,6 +338,7 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
       phenotype: phenotype.type,
       phenotypeName: phenotype.name,
       factors: risk.factors,
+      triggeredColumns,
     };
   });
 
@@ -428,6 +454,7 @@ export interface CSVUploadResult {
     phenotype: string;
     phenotypeName: string;
     factors: string[];
+    triggeredColumns: string[];
   }>;
   timestamp: string;
 }
