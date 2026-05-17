@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: herova-backend
+    env: python
+    plan: starter
+    branch: main
+    buildCommand: pip install -r backend/models/requirements.txt
+    startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT backend.app:app
+    envVars:
+      - key: MODEL_PATH
+        value: backend/models/pcos_xgboost_model.joblib
