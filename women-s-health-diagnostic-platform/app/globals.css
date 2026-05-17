@@ -261,7 +261,11 @@
 
 .butterfly-wings {
   transform-origin: 50% 50%;
-  animation: butterfly-flap 0.28s ease-in-out infinite;
+  animation-name: butterfly-flap;
+  animation-duration: var(--flap, 0.28s);
+  animation-timing-function: cubic-bezier(.4,0,.2,1);
+  animation-iteration-count: infinite;
+  animation-delay: var(--wing-phase, 0s);
 }
 
 .butterfly-right {
