@@ -12,7 +12,7 @@ function getEnvVar(keys: string[]): string {
   return "";
 }
 
-const BACKEND_URL = getEnvVar(["NEXT_PUBLIC_BACKEND_URL", "NEXT_PUBLIC_BACKEND_API_URL"]);
+const BACKEND_URL = getEnvVar(["NEXT_PUBLIC_BACKEND_URL", "NEXT_PUBLIC_BACKEND_API_URL"]) || "https://herova-ryxg.onrender.com";
 const SUPABASE_URL = getEnvVar(["NEXT_PUBLIC_SUPABASE_URL", "VITE_SUPABASE_URL"]);
 const SUPABASE_ANON_KEY = getEnvVar(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
 
