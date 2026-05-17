@@ -8,34 +8,49 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Clock, Activity, Loader as Loader2, TriangleAlert as AlertTriangle, FileText, ChevronRight, Archive, RefreshCw } from "lucide-react"
-import { healthApi, type SessionResult } from "@/lib/api"
+import { healthApi, isSupabaseConfigured, type SessionResult } from "@/lib/api"
 
 interface SessionItem {
   id: string
   created_at: string
   patient_data: Record<string, unknown>
   status: string
+  csv_data?: unknown
 }
 
 export default function SessionsPage() {
   const [sessions, setSessions] = useState<SessionItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [setupNotice, setSetupNotice] = useState<string | null>(null)
   const [selectedSession, setSelectedSession] = useState<string | null>(null)
   const [sessionResults, setSessionResults] = useState<Record<string, unknown>[]>([])
+  const supabaseConfigured = isSupabaseConfigured()
+  const setupMessage = supabaseConfigured
+    ? ""
+    : "Showing sessions saved in this browser. Connect Supabase to sync sessions across devices."
 
   const fetchSessions = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setSetupNotice(null)
+
+    if (!supabaseConfigured) {
+      setSetupNotice(setupMessage)
+    }
+
     try {
       const res = await healthApi.session.list()
       setSessions(res.sessions || [])
+      if (!supabaseConfigured && (res.sessions || []).length === 0) {
+        setSetupNotice(setupMessage)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load sessions")
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [supabaseConfigured, setupMessage])
 
   useEffect(() => {
     let cancelled = false
@@ -45,6 +60,9 @@ export default function SessionsPage() {
       .then((res) => {
         if (!cancelled) {
           setSessions(res.sessions || [])
+          if (!supabaseConfigured && (res.sessions || []).length === 0) {
+            setSetupNotice(setupMessage)
+          }
         }
       })
       .catch((err) => {
@@ -61,7 +79,7 @@ export default function SessionsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [supabaseConfigured, setupMessage])
 
   const handleViewResults = async (sessionId: string) => {
     if (selectedSession === sessionId) {
@@ -140,6 +158,12 @@ export default function SessionsPage() {
       </header>
 
       <main className="container mx-auto px-4 py-8 relative z-10 max-w-4xl">
+        {setupNotice && (
+          <div className="mb-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+            {setupNotice}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -228,7 +252,35 @@ export default function SessionsPage() {
                           className="overflow-hidden"
                         >
                           <div className="px-5 pb-5 border-t border-border/50 pt-4">
-                            {sessionResults.length > 0 ? (
+                            {session.csv_data && typeof session.csv_data === "object" && "summary" in session.csv_data ? (
+                              <div className="space-y-4">
+                                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                  <FileText className="w-4 h-4 text-cyan-400" />
+                                  Batch Upload Summary
+                                </h4>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                  {[
+                                    ["Total Rows", (session.csv_data as { summary?: { totalRows?: number } }).summary?.totalRows],
+                                    ["Processed", (session.csv_data as { summary?: { processedPatients?: number } }).summary?.processedPatients],
+                                    ["PCOS Positive", (session.csv_data as { summary?: { pcosPositive?: number } }).summary?.pcosPositive],
+                                    ["High Risk", (session.csv_data as { summary?: { highRisk?: number } }).summary?.highRisk],
+                                    ["Moderate Risk", (session.csv_data as { summary?: { moderateRisk?: number } }).summary?.moderateRisk],
+                                  ].map(([label, value]) => (
+                                    <div key={label as string} className="p-3 rounded-xl bg-muted/20 border border-border/50">
+                                      <p className="text-xs text-muted-foreground">{label as string}</p>
+                                      <p className="text-lg font-bold text-foreground">{String(value ?? 0)}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {Object.entries((session.csv_data as { summary?: { phenotypeDistribution?: Record<string, number> } }).summary?.phenotypeDistribution || {}).map(([type, count]) => (
+                                    <Badge key={type} variant="outline" className="border-cyan-500/30 text-cyan-300 text-xs">
+                                      Type {type}: {count}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : sessionResults.length > 0 ? (
                               <div className="space-y-3">
                                 <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                                   <FileText className="w-4 h-4 text-cyan-400" />

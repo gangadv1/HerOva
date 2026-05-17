@@ -34,6 +34,8 @@ npm start
 ## Notes
 
 - Next.js may warn if multiple lockfiles exist. Set `turbopack.root` in `next.config.mjs` or remove extra lockfiles if needed.
+- Sessions and Supabase-backed actions require `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your environment.
+- If you run the Supabase Edge Functions locally or in production, also set the service-role variables used by the backend functions.
 
 ## Contributing
 

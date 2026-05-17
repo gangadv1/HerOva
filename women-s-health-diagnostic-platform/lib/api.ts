@@ -14,6 +14,22 @@ function getEnvVar(keys: string[]): string {
 
 const SUPABASE_URL = getEnvVar(["NEXT_PUBLIC_SUPABASE_URL", "VITE_SUPABASE_URL"]);
 const SUPABASE_ANON_KEY = getEnvVar(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
+const LOCAL_MODEL_URL = getEnvVar(["LOCAL_MODEL_URL", "REACT_APP_LOCAL_MODEL_URL"]) || "http://localhost:8000";
+const LOCAL_SESSION_STORAGE_KEY = "herova.local.sessions.v1";
+
+interface LocalSessionRecord {
+  id: string;
+  created_at: string;
+  patient_data: Record<string, unknown>;
+  csv_data?: unknown;
+  status: string;
+  result?: Record<string, unknown>;
+  results?: Array<Record<string, unknown>>;
+}
+
+interface LocalSessionStore {
+  sessions: LocalSessionRecord[];
+}
 
 // Disable mock mode: always call real backend functions using SUPABASE_URL
 const USE_MOCK = false;
@@ -26,14 +42,85 @@ function getHeaders(): Record<string, string> {
   };
 }
 
-async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
-  if (!SUPABASE_URL) {
-    throw new Error("SUPABASE_URL is not set. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment. See README for setup.");
+function isBrowserStorageAvailable() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function readLocalSessionStore(): LocalSessionStore {
+  if (!isBrowserStorageAvailable()) {
+    return { sessions: [] };
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${endpoint}`, {
+  try {
+    const raw = window.localStorage.getItem(LOCAL_SESSION_STORAGE_KEY);
+    if (!raw) return { sessions: [] };
+    const parsed = JSON.parse(raw) as Partial<LocalSessionStore>;
+    if (!parsed || !Array.isArray(parsed.sessions)) return { sessions: [] };
+    return { sessions: parsed.sessions as LocalSessionRecord[] };
+  } catch {
+    return { sessions: [] };
+  }
+}
+
+function writeLocalSessionStore(store: LocalSessionStore) {
+  if (!isBrowserStorageAvailable()) return;
+  window.localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, JSON.stringify(store));
+}
+
+function upsertLocalSession(session: LocalSessionRecord) {
+  const store = readLocalSessionStore();
+  const index = store.sessions.findIndex((item) => item.id === session.id);
+
+  if (index >= 0) {
+    store.sessions[index] = { ...store.sessions[index], ...session };
+  } else {
+    store.sessions.unshift(session);
+  }
+
+  store.sessions.sort((left, right) => right.created_at.localeCompare(left.created_at));
+  writeLocalSessionStore(store);
+}
+
+function getLocalSession(sessionId: string) {
+  const store = readLocalSessionStore();
+  return store.sessions.find((session) => session.id === sessionId);
+}
+
+function normalizeSavedResult(result: Record<string, unknown>) {
+  const pcosRiskScore = result.pcos_risk_score ?? result.pcosRiskScore ?? 0;
+  const riskLevel = result.risk_level ?? result.riskLevel ?? "low";
+  const phenotype = result.phenotype ?? "NA";
+  const phenotypeName = result.phenotype_name ?? result.phenotypeName ?? "Unknown";
+  const phenotypeDescription = result.phenotype_description ?? result.phenotypeDescription ?? "";
+  const contributingFactors = result.contributing_factors ?? result.contributingFactors ?? [];
+  const shapValues = result.shap_values ?? result.shapValues ?? [];
+  const clusterAssignment = result.cluster_assignment ?? result.clusterAssignment ?? {};
+  const confidenceMetrics = result.confidence_metrics ?? result.confidenceMetrics ?? {};
+  const recommendations = result.recommendations ?? [];
+
+  return {
+    ...result,
+    pcos_risk_score: pcosRiskScore,
+    risk_level: riskLevel,
+    phenotype,
+    phenotype_name: phenotypeName,
+    phenotype_description: phenotypeDescription,
+    contributing_factors: contributingFactors,
+    shap_values: shapValues,
+    cluster_assignment: clusterAssignment,
+    confidence_metrics: confidenceMetrics,
+    recommendations,
+  };
+}
+
+async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
+  const useLocal = !SUPABASE_URL;
+  const url = useLocal ? `${LOCAL_MODEL_URL}/${endpoint}` : `${SUPABASE_URL}/functions/v1/${endpoint}`;
+  const headers = useLocal ? { "Content-Type": "application/json" } : getHeaders();
+
+  const response = await fetch(url, {
     method: "POST",
-    headers: getHeaders(),
+    headers,
     body: JSON.stringify(body),
   });
 
@@ -87,7 +174,7 @@ function parseCsvText(csvText: string): Array<Record<string, string>> {
   const normalized = csvText.replace(/\r\n/g, "\n").trim();
   if (!normalized) return [];
 
-  const lines = normalized.split("\n").filter(Boolean);
+  const lines = normalized.split("\n");
   if (lines.length < 2) return [];
 
   const delimiter = detectDelimiter(lines[0]);
@@ -251,6 +338,96 @@ function buildPatientFromUploadedRow(row: Record<string, string>) {
     weightGain,
     fastFood,
     regularExercise,
+  };
+}
+
+function buildAnalysisPayload(data: Record<string, unknown>) {
+  const age = toNumber(data.age);
+  const weight = toNumber(data.weight);
+  const height = toNumber(data.height);
+  const bmi = toNumber(data.bmi, weight && height ? Number((weight / ((height / 100) ** 2)).toFixed(1)) : 0);
+  const cycleLength = toNumber(data.cycleLength);
+  const irregularPeriods = toBoolean(data.irregularPeriods);
+  const hirsutism = toBoolean(data.hirsutism);
+  const acne = toBoolean(data.acne);
+  const hairLoss = toBoolean(data.hairLoss);
+  const skinDarkening = toBoolean(data.skinDarkening);
+  const polycysticAppearance = toBoolean(data.polycysticAppearance);
+  const folLeft = toNumber(data.follicleCountLeft);
+  const folRight = toNumber(data.follicleCountRight);
+  const ovaryLeft = toNumber(data.ovaryVolumeLeft);
+  const ovaryRight = toNumber(data.ovaryVolumeRight);
+  const waist = toNumber(data.waistCircumference);
+  const hip = toNumber(data.hip);
+  const waistHipRatio = toNumber(data.waistHipRatio, waist && hip ? Number((waist / hip).toFixed(2)) : 0);
+  const lh = toNumber(data.lh);
+  const fsh = toNumber(data.fsh);
+  const lhFshRatio = toNumber(data.lhFshRatio, lh > 0 && fsh > 0 ? Number((lh / fsh).toFixed(2)) : 0);
+
+  return {
+    ...data,
+    age,
+    weight,
+    height,
+    bmi,
+    cycleLength,
+    cycleLengthVariability: String(data.cycleLengthVariability || (irregularPeriods ? "irregular" : "regular")),
+    periodDuration: toNumber(data.periodDuration),
+    ageAtMenarche: toNumber(data.ageAtMenarche),
+    irregularPeriods,
+    acne,
+    acneSeverity: String(data.acneSeverity || (acne ? "moderate" : "none")),
+    hirsutism,
+    hirsutismScore: toNumber(data.hirsutismScore),
+    hairLoss,
+    skinDarkening,
+    fastingGlucose: toNumber(data.fastingGlucose),
+    insulinLevel: toNumber(data.insulinLevel),
+    homaIr: toNumber(data.homaIr),
+    waistCircumference: waist,
+    bloodPressureSystolic: toNumber(data.bloodPressureSystolic),
+    bloodPressureDiastolic: toNumber(data.bloodPressureDiastolic),
+    ovaryVolumeLeft: ovaryLeft,
+    ovaryVolumeRight: ovaryRight,
+    follicleCountLeft: folLeft,
+    follicleCountRight: folRight,
+    polycysticAppearance,
+    endometrialThickness: toNumber(data.endometrialThickness),
+    lh,
+    fsh,
+    lhFshRatio,
+    totalTestosterone: toNumber(data.totalTestosterone),
+    freeTestosterone: toNumber(data.freeTestosterone),
+    dheas: toNumber(data.dheas),
+    amh: toNumber(data.amh),
+    prolactin: toNumber(data.prolactin),
+    tsh: toNumber(data.tsh),
+    waistHipRatio,
+    "Age (yrs)": age,
+    "Weight (Kg)": weight,
+    "Height(Cm)": height,
+    "BMI": bmi,
+    "Cycle(R/I)": irregularPeriods ? "I" : "R",
+    "Cycle length(days)": cycleLength,
+    "Pimples(Y/N)": acne ? "Y" : "N",
+    "hair growth(Y/N)": hirsutism ? "Y" : "N",
+    "Hair loss(Y/N)": hairLoss ? "Y" : "N",
+    "Skin darkening (Y/N)": skinDarkening ? "Y" : "N",
+    "Reg.Exercise(Y/N)": toBoolean(data.regularExercise) ? "Y" : "N",
+    "AMH(ng/mL)": toNumber(data.amh),
+    "FSH(mIU/mL)": fsh,
+    "LH(mIU/mL)": lh,
+    "FSH/LH": lh > 0 ? Number((fsh / lh).toFixed(2)) : 0,
+    "Follicle No. (L)": folLeft,
+    "Follicle No. (R)": folRight,
+    "Avg. F size (L) (mm)": ovaryLeft,
+    "Avg. F size (R) (mm)": ovaryRight,
+    "Endometrium (mm)": toNumber(data.endometrialThickness),
+    "BP _Systolic (mmHg)": toNumber(data.bloodPressureSystolic),
+    "BP _Diastolic (mmHg)": toNumber(data.bloodPressureDiastolic),
+    "Waist(inch)": waist,
+    "Hip(inch)": hip,
+    "Waist:Hip Ratio": waistHipRatio,
   };
 }
 
@@ -535,7 +712,21 @@ export const healthApi = {
   predict: (data: Record<string, unknown>) =>
     USE_MOCK
       ? Promise.resolve({ success: true, pcosRiskScore: 12, riskLevel: "low", phenotype: { type: "NA", name: "Non-PCOS", description: "Mock result" }, contributingFactors: [], confidenceMetrics: { pcosClassification: 0.9, phenotypeMatch: 0.8, dataQuality: 0.9 }, recommendations: [], timestamp: new Date().toISOString() } as PredictionResult)
-      : apiCall<PredictionResult>("predict", data),
+      : (async () => {
+          const payload = buildAnalysisPayload(data);
+          try {
+            const resp = await fetch(`${LOCAL_MODEL_URL}/predict`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            if (resp.ok) return resp.json();
+          } catch (e) {
+            // local model unavailable; fallthrough to Supabase
+          }
+
+          return apiCall<PredictionResult>("predict", payload);
+        })(),
 
   shap: (data: Record<string, unknown>) =>
     apiCall<SHAPResult>("shap", data),
@@ -555,7 +746,20 @@ export const healthApi = {
           recommendations: ["Refer to endocrinology"],
           timestamp: new Date().toISOString(),
         } as FullAnalysisResult)
-      : apiCall<FullAnalysisResult>("analyze", data),
+      : (async () => {
+          const payload = buildAnalysisPayload(data);
+          try {
+            const resp = await fetch(`${LOCAL_MODEL_URL}/analyze`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            if (resp.ok) return resp.json();
+          } catch (e) {
+            // fallback to Supabase
+          }
+          return apiCall<FullAnalysisResult>("analyze", payload);
+        })(),
 
   csvUpload: async (file: File): Promise<CSVUploadResult> => {
     if (!SUPABASE_URL) {
@@ -589,32 +793,90 @@ export const healthApi = {
     create: (patientData: Record<string, unknown>, csvData?: unknown) =>
       USE_MOCK
         ? Promise.resolve({ success: true, session: { id: "mock-session-1", created_at: new Date().toISOString(), patient_data: patientData, csv_data: csvData, status: "created" } } as SessionResult)
-        : apiCall<SessionResult>("session", { action: "create", patientData, csvData }),
+        : !SUPABASE_URL
+          ? (() => {
+              const session = {
+                id: `local-session-${Date.now()}`,
+                created_at: new Date().toISOString(),
+                patient_data: patientData,
+                csv_data: csvData,
+                status: "created",
+              };
+
+              upsertLocalSession(session);
+              return Promise.resolve({ success: true, session } as SessionResult);
+            })()
+          : apiCall<SessionResult>("session", { action: "create", patientData, csvData }),
 
     get: (sessionId: string) =>
       USE_MOCK
         ? Promise.resolve({ success: true, session: { id: sessionId, created_at: new Date().toISOString(), patient_data: {}, status: "created" } } as SessionResult)
-        : apiCall<SessionResult>("session", { action: "get", sessionId }),
+        : !SUPABASE_URL
+          ? Promise.resolve({
+              success: true,
+              session: getLocalSession(sessionId) || { id: sessionId, created_at: new Date().toISOString(), patient_data: {}, status: "created" },
+            } as SessionResult)
+          : apiCall<SessionResult>("session", { action: "get", sessionId }),
 
     update: (sessionId: string, updates: { patientData?: Record<string, unknown>; csvData?: unknown; status?: string }) =>
       USE_MOCK
         ? Promise.resolve({ success: true, session: { id: sessionId, created_at: new Date().toISOString(), patient_data: updates.patientData || {}, csv_data: updates.csvData, status: updates.status || "updated" } } as SessionResult)
-        : apiCall<SessionResult>("session", { action: "update", sessionId, ...updates }),
+        : !SUPABASE_URL
+          ? (() => {
+              const existing = getLocalSession(sessionId);
+              const session = {
+                id: sessionId,
+                created_at: existing?.created_at || new Date().toISOString(),
+                patient_data: updates.patientData || existing?.patient_data || {},
+                csv_data: updates.csvData ?? existing?.csv_data,
+                status: updates.status || existing?.status || "updated",
+                result: existing?.result,
+                results: existing?.results,
+              };
+
+              upsertLocalSession(session);
+              return Promise.resolve({ success: true, session } as SessionResult);
+            })()
+          : apiCall<SessionResult>("session", { action: "update", sessionId, ...updates }),
 
     saveResult: (sessionId: string, result: Record<string, unknown>) =>
       USE_MOCK
         ? Promise.resolve({ success: true, session: { id: sessionId, created_at: new Date().toISOString(), patient_data: {}, status: "saved" }, result } as SessionResult)
-        : apiCall<SessionResult>("session", { action: "save-result", sessionId, ...result }),
+        : !SUPABASE_URL
+          ? (() => {
+              const normalizedResult = normalizeSavedResult(result);
+              const existing = getLocalSession(sessionId);
+              const session = {
+                id: sessionId,
+                created_at: existing?.created_at || new Date().toISOString(),
+                patient_data: existing?.patient_data || {},
+                csv_data: existing?.csv_data,
+                status: "saved",
+                result: normalizedResult,
+                results: [normalizedResult],
+              };
+
+              upsertLocalSession(session);
+              return Promise.resolve({ success: true, session, result: normalizedResult } as SessionResult);
+            })()
+          : apiCall<SessionResult>("session", { action: "save-result", sessionId, ...result }),
 
     list: () =>
       USE_MOCK
         ? Promise.resolve({ success: true, sessions: [{ id: "mock-session-1", created_at: new Date().toISOString(), patient_data: {}, status: "created" }] } as SessionResult)
-        : apiCall<SessionResult>("session", { action: "list" }),
+        : !SUPABASE_URL
+          ? Promise.resolve({ success: true, sessions: readLocalSessionStore().sessions } as SessionResult)
+          : apiCall<SessionResult>("session", { action: "list" }),
 
     getResults: (sessionId: string) =>
       USE_MOCK
         ? Promise.resolve({ success: true, results: [ { pcos_risk_score: 42, phenotype: "Ovulatory PCOS", phenotype_name: "Ovulatory", phenotype_description: "Mock" , contributing_factors: ["AMH"] } ] } as SessionResult)
-        : apiCall<SessionResult>("session", { action: "get-results", sessionId }),
+        : !SUPABASE_URL
+          ? Promise.resolve({
+              success: true,
+              results: getLocalSession(sessionId)?.results || (getLocalSession(sessionId)?.result ? [normalizeSavedResult(getLocalSession(sessionId)!.result as Record<string, unknown>)] : []),
+            } as SessionResult)
+          : apiCall<SessionResult>("session", { action: "get-results", sessionId }),
   },
 };
 

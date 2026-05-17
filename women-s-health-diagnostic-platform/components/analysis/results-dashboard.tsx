@@ -49,15 +49,15 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
     setSaving(true)
     try {
       await healthApi.session.saveResult(sessionId, {
-        pcosRiskScore: analysis.prediction.pcosRiskScore,
+        pcos_risk_score: analysis.prediction.pcosRiskScore,
         phenotype: analysis.phenotype.type,
-        phenotypeName: analysis.phenotype.name,
-        phenotypeDescription: analysis.phenotype.description,
-        riskLevel: analysis.prediction.riskLevel,
-        contributingFactors: analysis.prediction.contributingFactors,
-        shapValues: analysis.shap.values,
-        clusterAssignment: analysis.clustering.assignedCluster,
-        confidenceMetrics: analysis.confidenceMetrics,
+        phenotype_name: analysis.phenotype.name,
+        phenotype_description: analysis.phenotype.description,
+        risk_level: analysis.prediction.riskLevel,
+        contributing_factors: analysis.prediction.contributingFactors,
+        shap_values: analysis.shap.values,
+        cluster_assignment: analysis.clustering.assignedCluster,
+        confidence_metrics: analysis.confidenceMetrics,
         recommendations: analysis.recommendations,
       })
     } catch {

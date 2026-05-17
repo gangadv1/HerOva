@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Upload, FileSpreadsheet, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Loader as Loader2, Download, Users, Activity, X } from "lucide-react"
 import { healthApi, type CSVUploadResult } from "@/lib/api"
+import { toast } from "@/hooks/use-toast"
 
 export default function CSVUploadPage() {
   const [dragActive, setDragActive] = useState(false)
@@ -16,6 +17,9 @@ export default function CSVUploadPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<CSVUploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -54,6 +58,8 @@ export default function CSVUploadPage() {
     if (!file) return
     setLoading(true)
     setError(null)
+    setSavedNotice(null)
+    setSessionId(null)
     try {
       const res = await healthApi.csvUpload(file)
       setResult(res)
@@ -68,7 +74,62 @@ export default function CSVUploadPage() {
     setFile(null)
     setResult(null)
     setError(null)
+    setSavedNotice(null)
+    setSessionId(null)
+    setSaving(false)
     if (inputRef.current) inputRef.current.value = ""
+  }
+
+  const handleSaveBatch = async () => {
+    if (!result || saving) return
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      const session = await healthApi.session.create(
+        {
+          source: "batch-upload",
+          fileName: file?.name || "batch-upload.csv",
+          totalRows: result.summary.totalRows,
+          processedPatients: result.summary.processedPatients,
+          pcosPositive: result.summary.pcosPositive,
+        },
+        result
+      )
+
+      const savedSessionId = session.session?.id
+      if (savedSessionId) {
+        setSessionId(savedSessionId)
+        await healthApi.session.saveResult(savedSessionId, {
+          batch_summary: result.summary,
+          batch_patients: result.patients,
+          file_name: file?.name || "batch-upload.csv",
+          source: "batch-upload",
+        })
+        setSavedNotice(`Saved batch upload as session ${savedSessionId.slice(0, 8)}.`)
+        toast({
+          title: "Batch results saved",
+          description: `Session ${savedSessionId.slice(0, 8)} now appears in Sessions.`,
+        })
+      } else {
+        setSavedNotice("Saved batch upload.")
+        toast({
+          title: "Batch results saved",
+          description: "Your batch upload was saved successfully.",
+        })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save batch results"
+      setError(message)
+      toast({
+        title: "Batch save failed",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
   const sampleCSV = `Age,Weight,Height,BMI,Cycle_Length,Irregular_Periods,Acne,Hirsutism,Total_Testosterone,LH,FSH,AMH,HOMA_IR,Follicle_Count_Left,Follicle_Count_Right,Polycystic
@@ -420,10 +481,30 @@ export default function CSVUploadPage() {
                     Single Patient Analysis
                   </Button>
                 </Link>
+                <Button
+                  onClick={handleSaveBatch}
+                  disabled={saving}
+                  variant="outline"
+                  className="border-cyan-500/50 text-foreground hover:bg-cyan-500/10"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Batch Results"
+                  )}
+                </Button>
                 <Button onClick={handleReset} className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
                   Upload Another File
                 </Button>
               </div>
+              {savedNotice && (
+                <div className="mt-4 text-center text-sm text-cyan-300">
+                  {savedNotice}
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
