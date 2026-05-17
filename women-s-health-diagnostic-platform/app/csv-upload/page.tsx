@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Upload, FileSpreadsheet, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Loader as Loader2, Download, Users, Activity, X } from "lucide-react"
-import { healthApi, type CSVUploadResult, isSupabaseConfigured } from "@/lib/api"
+import { healthApi, type CSVUploadResult } from "@/lib/api"
 
 export default function CSVUploadPage() {
   const [dragActive, setDragActive] = useState(false)
@@ -80,25 +80,6 @@ export default function CSVUploadPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {!isSupabaseConfigured() && (
-        <div className="container mx-auto px-4 py-6">
-          <Card className="glass border-pink-500/20 p-6 mb-6">
-            <div className="flex items-start gap-4">
-              <AlertTriangle className="w-6 h-6 text-pink-400 shrink-0" />
-              <div>
-                <h4 className="font-bold">Supabase not configured</h4>
-                <p className="text-sm text-muted-foreground">
-                  The frontend requires NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to call server functions for predictions.
-                  Please set these environment variables in your local environment or Vercel/Supabase deployment and restart the dev server.
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Example: <span className="font-mono">export NEXT_PUBLIC_SUPABASE_URL=\"https://xyz.supabase.co\"</span>
-                </p>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
       <div className="fixed inset-0 bg-mesh opacity-30 pointer-events-none" />
 
       <header className="sticky top-0 z-50 glass border-b border-border/50">

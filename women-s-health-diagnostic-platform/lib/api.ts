@@ -45,6 +45,263 @@ async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
   return response.json();
 }
 
+function detectDelimiter(headerLine: string): string {
+  if (headerLine.includes("\t")) return "\t";
+  if (headerLine.includes(";")) return ";";
+  return ",";
+}
+
+function splitCsvLine(line: string, delimiter: string): string[] {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === delimiter && !inQuotes) {
+      values.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function parseCsvText(csvText: string): Array<Record<string, string>> {
+  const normalized = csvText.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+
+  const lines = normalized.split("\n").filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const delimiter = detectDelimiter(lines[0]);
+  const headers = splitCsvLine(lines[0], delimiter).map((header) => header.trim().replace(/^\uFEFF/, ""));
+
+  return lines.slice(1).map((line) => {
+    const values = splitCsvLine(line, delimiter);
+    return headers.reduce<Record<string, string>>((row, header, index) => {
+      row[header] = (values[index] ?? "").trim();
+      return row;
+    }, {});
+  });
+}
+
+function toNumber(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const cleaned = value.replace(/,/g, "").trim();
+    if (!cleaned) return 0;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return ["y", "yes", "true", "1", "i", "irregular"].includes(normalized);
+  }
+  return false;
+}
+
+function getField(row: Record<string, string>, candidates: string[], fallback = ""): string {
+  for (const candidate of candidates) {
+    if (row[candidate] !== undefined && row[candidate] !== "") return row[candidate];
+  }
+  return fallback;
+}
+
+function buildPatientFromUploadedRow(row: Record<string, string>) {
+  const weight = toNumber(getField(row, ["Weight (Kg)", "Weight", "weight"]));
+  const height = toNumber(getField(row, ["Height(Cm)", "Height (Cm)", "Height", "height"]));
+  const bmi = toNumber(getField(row, ["BMI", "bmi"], weight && height ? (weight / ((height / 100) ** 2)).toFixed(1) : "0"));
+  const cycleLength = toNumber(getField(row, ["Cycle length(days)", "Cycle_Length", "cycle_length"]));
+  const irregularCycleValue = getField(row, ["Cycle(R/I)", "Irregular_Periods", "irregular_periods"]);
+  const waist = toNumber(getField(row, ["Waist(inch)", "Waist", "waist"]));
+  const hip = toNumber(getField(row, ["Hip(inch)", "Hip", "hip"]));
+  const waistHipRatio = toNumber(getField(row, ["Waist:Hip Ratio", "Waist_Hip_Ratio", "waist_hip_ratio"], waist && hip ? (waist / hip).toFixed(2) : "0"));
+  const fastingGlucose = toNumber(getField(row, ["RBS(mg/dl)", "RBS", "Glucose", "Fasting_Glucose"]));
+  const fsh = toNumber(getField(row, ["FSH(mIU/mL)", "FSH", "fsh"]));
+  const lh = toNumber(getField(row, ["LH(mIU/mL)", "LH", "lh"]));
+  const totalTestosterone = toNumber(getField(row, ["PRG(ng/mL)", "PRL(ng/mL)", "Total_Testosterone", "total_testosterone"]));
+  const freeTestosterone = toNumber(getField(row, ["II    beta-HCG(mIU/mL)", "Free_Testosterone", "free_testosterone"]));
+  const amh = toNumber(getField(row, ["AMH(ng/mL)", "AMH", "amh"]));
+  const prolactin = toNumber(getField(row, ["PRL(ng/mL)", "Prolactin", "prolactin"]));
+  const tsh = toNumber(getField(row, ["TSH (mIU/L)", "TSH", "tsh"]));
+  const folLeft = toNumber(getField(row, ["Follicle No. (L)", "Follicle_Count_Left", "follicle_count_left"]));
+  const folRight = toNumber(getField(row, ["Follicle No. (R)", "Follicle_Count_Right", "follicle_count_right"]));
+  const avgSizeLeft = toNumber(getField(row, ["Avg. F size (L) (mm)", "Avg_F_Size_Left", "avg_f_size_left"]));
+  const avgSizeRight = toNumber(getField(row, ["Avg. F size (R) (mm)", "Avg_F_Size_Right", "avg_f_size_right"]));
+  const bloodPressureSystolic = toNumber(getField(row, ["BP _Systolic (mmHg)", "BP_Systolic", "bp_systolic"]));
+  const bloodPressureDiastolic = toNumber(getField(row, ["BP _Diastolic (mmHg)", "BP_Diastolic", "bp_diastolic"]));
+
+  return {
+    age: toNumber(getField(row, ["Age (yrs)", "Age", "age"])),
+    weight,
+    height,
+    bmi,
+    cycleLength,
+    cycleLengthVariability: irregularCycleValue || (cycleLength > 35 ? "irregular" : "regular"),
+    periodDuration: 5,
+    ageAtMenarche: 13,
+    irregularPeriods: toBoolean(irregularCycleValue),
+    acne: toBoolean(getField(row, ["Pimples(Y/N)", "Acne", "acne"])),
+    acneSeverity: toBoolean(getField(row, ["Pimples(Y/N)"])) ? "moderate" : "none",
+    hirsutism: toBoolean(getField(row, ["hair growth(Y/N)", "Hirsutism", "hirsutism"])),
+    hirsutismScore: toBoolean(getField(row, ["hair growth(Y/N)"])) ? 1 : 0,
+    hairLoss: toBoolean(getField(row, ["Hair loss(Y/N)", "Hair_Loss", "hair_loss"])),
+    skinDarkening: toBoolean(getField(row, ["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"])),
+    fastingGlucose,
+    insulinLevel: 0,
+    homaIr: 0,
+    waistCircumference: waist,
+    bloodPressureSystolic,
+    bloodPressureDiastolic,
+    ovaryVolumeLeft: avgSizeLeft,
+    ovaryVolumeRight: avgSizeRight,
+    follicleCountLeft: folLeft,
+    follicleCountRight: folRight,
+    polycysticAppearance: folLeft >= 12 || folRight >= 12,
+    endometrialThickness: toNumber(getField(row, ["Endometrium (mm)", "Endometrial_Thickness", "endometrial_thickness"])),
+    lh,
+    fsh,
+    lhFshRatio: toNumber(getField(row, ["FSH/LH", "LH_FSH_Ratio", "lh_fsh_ratio"], fsh ? (lh / fsh).toFixed(2) : "0")),
+    totalTestosterone,
+    freeTestosterone,
+    dheas: 200,
+    amh,
+    prolactin,
+    tsh,
+    waistHipRatio,
+    pulseRate: toNumber(getField(row, ["Pulse rate(bpm)", "pulse_rate"])),
+    respiratoryRate: toNumber(getField(row, ["RR (breaths/min)", "rr"])),
+    bloodGroup: getField(row, ["Blood Group", "blood_group"]),
+    pregnancyStatus: getField(row, ["Pregnant(Y/N)", "pregnant"]),
+    abortions: toNumber(getField(row, ["No. of abortions", "abortions"])),
+    betaHcgI: toNumber(getField(row, ["I   beta-HCG(mIU/mL)", "beta_hcg_i"])),
+    betaHcgII: toNumber(getField(row, ["II    beta-HCG(mIU/mL)", "beta_hcg_ii"])),
+    vitD3: toNumber(getField(row, ["Vit D3 (ng/mL)", "vit_d3"])),
+    prg: toNumber(getField(row, ["PRG(ng/mL)", "prg"])),
+    fastFood: toBoolean(getField(row, ["Fast food (Y/N)", "fast_food"])),
+    regularExercise: toBoolean(getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"])),
+  };
+}
+
+function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedRow>) {
+  let score = 0;
+  const factors: string[] = [];
+
+  if (patient.cycleLength > 35 || patient.irregularPeriods) {
+    score += 20;
+    factors.push("Irregular or prolonged cycles");
+  }
+  if (patient.hirsutism || patient.acne || patient.hairLoss || patient.skinDarkening) {
+    score += 20;
+    factors.push("Clinical hyperandrogenism");
+  }
+  if (patient.amh > 6) {
+    score += 10;
+    factors.push("Elevated AMH");
+  }
+  if (patient.lhFshRatio > 2 || (patient.lh && patient.fsh && patient.lh / patient.fsh > 2)) {
+    score += 10;
+    factors.push("Elevated LH:FSH ratio");
+  }
+  if (patient.follicleCountLeft >= 12 || patient.follicleCountRight >= 12) {
+    score += 20;
+    factors.push("Polycystic ovarian morphology");
+  }
+  if (patient.bmi >= 25 || patient.weight > 0 && patient.weight / ((patient.height / 100) ** 2) >= 25) {
+    score += 10;
+    factors.push("Elevated BMI");
+  }
+  if (patient.waistHipRatio > 0.85) {
+    score += 5;
+    factors.push("Increased waist-to-hip ratio");
+  }
+  if (patient.fastFood) {
+    score += 3;
+    factors.push("Frequent fast-food intake");
+  }
+  if (!patient.regularExercise) {
+    score += 5;
+    factors.push("Low physical activity");
+  }
+  if (patient.tsh > 4.5 || patient.prolactin > 25 || patient.vitD3 > 0 && patient.vitD3 < 20) {
+    score += 5;
+    factors.push("Hormonal or metabolic imbalance");
+  }
+
+  return { score: Math.min(score, 100), factors };
+}
+
+function determineLocalPhenotype(patient: ReturnType<typeof buildPatientFromUploadedRow>) {
+  const hasOligo = patient.irregularPeriods || patient.cycleLength > 35;
+  const hasHA = patient.hirsutism || patient.acne || patient.hairLoss || patient.skinDarkening;
+  const hasPCOM = patient.follicleCountLeft >= 12 || patient.follicleCountRight >= 12;
+
+  if (hasOligo && hasHA && hasPCOM) return { type: "A", name: "Classic PCOS" };
+  if (hasOligo && hasHA) return { type: "B", name: "Non-PCO PCOS" };
+  if (hasHA && hasPCOM) return { type: "C", name: "Ovulatory PCOS" };
+  if (hasOligo && hasPCOM) return { type: "D", name: "Non-Hyperandrogenic PCOS" };
+  return { type: "NA", name: "Non-PCOS" };
+}
+
+function buildLocalCsvResult(csvText: string): CSVUploadResult {
+  const rows = parseCsvText(csvText);
+  const patients = rows.map((row, index) => {
+    const patient = buildPatientFromUploadedRow(row);
+    const risk = calculateLocalRisk(patient);
+    const phenotype = determineLocalPhenotype(patient);
+
+    return {
+      rowId: index + 1,
+      patientData: patient,
+      riskScore: risk.score,
+      riskLevel: risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low",
+      phenotype: phenotype.type,
+      phenotypeName: phenotype.name,
+      factors: risk.factors,
+    };
+  });
+
+  const phenotypeDistribution: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, NA: 0 };
+  for (const patient of patients) phenotypeDistribution[patient.phenotype] = (phenotypeDistribution[patient.phenotype] || 0) + 1;
+
+  return {
+    success: true,
+    summary: {
+      totalRows: rows.length,
+      processedPatients: patients.length,
+      highRisk: patients.filter((patient) => patient.riskLevel === "high").length,
+      moderateRisk: patients.filter((patient) => patient.riskLevel === "moderate").length,
+      lowRisk: patients.filter((patient) => patient.riskLevel === "low").length,
+      phenotypeDistribution,
+    },
+    patients,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export interface PredictionResult {
   success: boolean;
   pcosRiskScore: number;
@@ -241,7 +498,8 @@ export const healthApi = {
 
   csvUpload: async (file: File): Promise<CSVUploadResult> => {
     if (!SUPABASE_URL) {
-      throw new Error("SUPABASE_URL is not set. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment before uploading CSVs.");
+      const csvText = await file.text();
+      return buildLocalCsvResult(csvText);
     }
     const formData = new FormData();
     formData.append("file", file);

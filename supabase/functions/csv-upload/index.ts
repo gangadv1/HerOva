@@ -20,6 +20,44 @@ interface PatientInput {
   dheas: number; amh: number; prolactin: number; tsh: number;
 }
 
+function detectDelimiter(headerLine: string): string {
+  if (headerLine.includes("\t")) return "\t";
+  if (headerLine.includes(";")) return ";";
+  return ",";
+}
+
+function splitCsvLine(line: string, delimiter: string): string[] {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    const nextChar = line[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === delimiter && !inQuotes) {
+      values.push(current.trim());
+      current = "";
+      continue;
+    }
+
+    current += char;
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
 function calculatePCOSRisk(data: Partial<PatientInput>) {
   let score = 0;
   const factors: string[] = [];
@@ -45,12 +83,13 @@ function determinePhenotype(data: Partial<PatientInput>) {
 }
 
 function parseCSV(csvText: string): Record<string, unknown>[] {
-  const lines = csvText.trim().split("\n");
+  const lines = csvText.replace(/\r\n/g, "\n").trim().split("\n");
   if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ""));
+  const delimiter = detectDelimiter(lines[0]);
+  const headers = splitCsvLine(lines[0], delimiter).map(h => h.trim().replace(/^\uFEFF/, ""));
   const rows: Record<string, unknown>[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ""));
+    const values = splitCsvLine(lines[i], delimiter);
     const row: Record<string, unknown> = {};
     headers.forEach((header, idx) => {
       const val = values[idx];
@@ -74,46 +113,76 @@ function mapCSVToPatient(row: Record<string, unknown>): Partial<PatientInput> | 
     return toNum(val) === 1;
   };
   try {
-    const weight = toNum(get(["Weight", "weight", "Weight_kg"], 60));
-    const height = toNum(get(["Height", "height", "Height_cm"], 165));
-    const lh = toNum(get(["LH", "lh", "LH_mIU"], 10));
-    const fsh = toNum(get(["FSH", "fsh", "FSH_mIU"], 6));
-    const fastingGlucose = toNum(get(["Fasting_Glucose", "fasting_glucose", "Glucose"], 90));
-    const insulinLevel = toNum(get(["Insulin", "insulin", "Fasting_Insulin"], 10));
+    const weight = toNum(get(["Weight (Kg)", "Weight", "weight", "Weight_kg"], 60));
+    const height = toNum(get(["Height(Cm)", "Height (Cm)", "Height", "height", "Height_cm"], 165));
+    const lh = toNum(get(["LH(mIU/mL)", "LH", "lh", "LH_mIU"], 10));
+    const fsh = toNum(get(["FSH(mIU/mL)", "FSH", "fsh", "FSH_mIU"], 6));
+    const fastingGlucose = toNum(get(["RBS(mg/dl)", "Fasting_Glucose", "fasting_glucose", "Glucose"], 90));
+    const insulinLevel = 0;
+    const cycleValue = String(get(["Cycle(R/I)", "Cycle", "cycle"], "R"));
+    const waist = toNum(get(["Waist(inch)", "Waist", "waist", "Waist_Circumference"], 75));
+    const hip = toNum(get(["Hip(inch)", "Hip", "hip"], 90));
+    const folLeft = toNum(get(["Follicle No. (L)", "Follicle_Count_Left", "follicle_count_left"], 10));
+    const folRight = toNum(get(["Follicle No. (R)", "Follicle_Count_Right", "follicle_count_right"], 10));
     return {
-      age: toNum(get(["Age", "age"], 28)), weight, height,
+      age: toNum(get(["Age (yrs)", "Age", "age"], 28)), weight, height,
       bmi: toNum(get(["BMI", "bmi"], (weight / (height / 100) ** 2).toFixed(1))),
-      cycleLength: toNum(get(["Cycle_Length", "cycle_length"], 28)),
-      cycleLengthVariability: String(get(["Cycle_Variability", "cycle_variability"], "regular")),
+      cycleLength: toNum(get(["Cycle length(days)", "Cycle_Length", "cycle_length"], 28)),
+      cycleLengthVariability: cycleValue.toLowerCase() === "i" ? "irregular" : String(get(["Cycle_Variability", "cycle_variability"], "regular")),
       periodDuration: toNum(get(["Period_Duration", "period_duration"], 5)),
       ageAtMenarche: toNum(get(["Age_Menarche", "age_menarche"], 13)),
-      irregularPeriods: toBool(get(["Irregular_Periods", "irregular_periods", "Irregular"], false)),
-      acne: toBool(get(["Acne", "acne"], false)),
-      acneSeverity: String(get(["Acne_Severity", "acne_severity"], "none")),
-      hirsutism: toBool(get(["Hirsutism", "hirsutism"], false)),
-      hirsutismScore: toNum(get(["Hirsutism_Score", "hirsutism_score", "FG_Score"], 0)),
-      hairLoss: toBool(get(["Hair_Loss", "hair_loss"], false)),
-      skinDarkening: toBool(get(["Skin_Darkening", "skin_darkening", "Acanthosis_Nigricans"], false)),
+      irregularPeriods: cycleValue.toLowerCase() === "i" || toBool(get(["Irregular_Periods", "irregular_periods", "Irregular"], false)),
+      acne: toBool(get(["Pimples(Y/N)", "Acne", "acne"], false)),
+      acneSeverity: toBool(get(["Pimples(Y/N)", "Pimples"], false)) ? "moderate" : String(get(["Acne_Severity", "acne_severity"], "none")),
+      hirsutism: toBool(get(["hair growth(Y/N)", "Hirsutism", "hirsutism"], false)),
+      hirsutismScore: toNum(get(["hair growth(Y/N)", "Hirsutism_Score", "hirsutism_score", "FG_Score"], 0)),
+      hairLoss: toBool(get(["Hair loss(Y/N)", "Hair_Loss", "hair_loss"], false)),
+      skinDarkening: toBool(get(["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening", "Acanthosis_Nigricans"], false)),
       fastingGlucose, insulinLevel,
       homaIr: toNum(get(["HOMA_IR", "homa_ir", "HOMA"], (insulinLevel * fastingGlucose) / 405)),
-      waistCircumference: toNum(get(["Waist", "waist", "Waist_Circumference"], 75)),
-      bloodPressureSystolic: toNum(get(["BP_Systolic", "bp_systolic"], 120)),
-      bloodPressureDiastolic: toNum(get(["BP_Diastolic", "bp_diastolic"], 80)),
-      ovaryVolumeLeft: toNum(get(["Ovary_Vol_Left", "ovary_volume_left"], 8)),
-      ovaryVolumeRight: toNum(get(["Ovary_Vol_Right", "ovary_volume_right"], 8)),
-      follicleCountLeft: toNum(get(["Follicle_Count_Left", "follicle_count_left"], 10)),
-      follicleCountRight: toNum(get(["Follicle_Count_Right", "follicle_count_right"], 10)),
-      polycysticAppearance: toBool(get(["Polycystic", "polycystic", "PCO_Appearance"], false)),
-      endometrialThickness: toNum(get(["Endometrial_Thickness", "endometrial_thickness"], 8)),
+      waistCircumference: waist,
+      bloodPressureSystolic: toNum(get(["BP _Systolic (mmHg)", "BP_Systolic", "bp_systolic"], 120)),
+      bloodPressureDiastolic: toNum(get(["BP _Diastolic (mmHg)", "BP_Diastolic", "bp_diastolic"], 80)),
+      ovaryVolumeLeft: toNum(get(["Avg. F size (L) (mm)", "Ovary_Vol_Left", "ovary_volume_left"], 8)),
+      ovaryVolumeRight: toNum(get(["Avg. F size (R) (mm)", "Ovary_Vol_Right", "ovary_volume_right"], 8)),
+      follicleCountLeft: folLeft,
+      follicleCountRight: folRight,
+      polycysticAppearance: folLeft >= 12 || folRight >= 12 || toBool(get(["Polycystic", "polycystic", "PCO_Appearance"], false)),
+      endometrialThickness: toNum(get(["Endometrium (mm)", "Endometrial_Thickness", "endometrial_thickness"], 8)),
       lh, fsh, lhFshRatio: toNum(get(["LH_FSH_Ratio", "lh_fsh_ratio"], lh / fsh)),
-      totalTestosterone: toNum(get(["Total_Testosterone", "total_testosterone", "Testosterone"], 40)),
-      freeTestosterone: toNum(get(["Free_Testosterone", "free_testosterone"], 2)),
+      totalTestosterone: toNum(get(["PRG(ng/mL)", "Total_Testosterone", "total_testosterone", "Testosterone"], 40)),
+      freeTestosterone: toNum(get(["II    beta-HCG(mIU/mL)", "Free_Testosterone", "free_testosterone"], 2)),
       dheas: toNum(get(["DHEAS", "dheas"], 200)),
-      amh: toNum(get(["AMH", "amh"], 4)),
-      prolactin: toNum(get(["Prolactin", "prolactin"], 12)),
-      tsh: toNum(get(["TSH", "tsh"], 2)),
+      amh: toNum(get(["AMH(ng/mL)", "AMH", "amh"], 4)),
+      prolactin: toNum(get(["PRL(ng/mL)", "Prolactin", "prolactin"], 12)),
+      tsh: toNum(get(["TSH (mIU/L)", "TSH", "tsh"], 2)),
     };
   } catch { return null; }
+}
+
+function buildRisk(data: Partial<PatientInput>) {
+  let score = 0;
+  const factors: string[] = [];
+  if (data.irregularPeriods || (data.cycleLength && data.cycleLength > 35)) { score += 20; factors.push("Irregular or prolonged cycles"); }
+  if (data.hirsutism || data.acne || data.hairLoss || data.skinDarkening) { score += 20; factors.push("Clinical hyperandrogenism"); }
+  if ((data.totalTestosterone && data.totalTestosterone > 50) || (data.freeTestosterone && data.freeTestosterone > 3)) { score += 15; factors.push("Elevated androgen marker"); }
+  if (data.polycysticAppearance || (data.follicleCountLeft && data.follicleCountLeft >= 12) || (data.follicleCountRight && data.follicleCountRight >= 12) || (data.ovaryVolumeLeft && data.ovaryVolumeLeft > 10) || (data.ovaryVolumeRight && data.ovaryVolumeRight > 10)) { score += 20; factors.push("Polycystic ovarian morphology"); }
+  if (data.lhFshRatio && data.lhFshRatio > 2) { score += 10; factors.push("Elevated LH:FSH ratio"); }
+  if (data.amh && data.amh > 6) { score += 10; factors.push("Elevated AMH"); }
+  if (data.homaIr && data.homaIr > 2.5) { score += 10; factors.push("Insulin resistance"); }
+  if (data.bloodPressureSystolic && data.bloodPressureSystolic >= 130 || data.bloodPressureDiastolic && data.bloodPressureDiastolic >= 85) { score += 5; factors.push("Elevated blood pressure"); }
+  return { score: Math.min(score, 100), factors };
+}
+
+function buildPhenotype(data: Partial<PatientInput>) {
+  const hasOligo = data.irregularPeriods || (data.cycleLength && data.cycleLength > 35);
+  const hasHA = data.hirsutism || data.acne || data.hairLoss || data.skinDarkening;
+  const hasPCOM = data.polycysticAppearance || (data.follicleCountLeft && data.follicleCountLeft >= 12) || (data.follicleCountRight && data.follicleCountRight >= 12);
+  if (hasOligo && hasHA && hasPCOM) return { type: "A", name: "Classic PCOS" };
+  if (hasOligo && hasHA) return { type: "B", name: "Non-PCO PCOS" };
+  if (hasHA && hasPCOM) return { type: "C", name: "Ovulatory PCOS" };
+  if (hasOligo && hasPCOM) return { type: "D", name: "Non-Hyperandrogenic PCOS" };
+  return { type: "NA", name: "Non-PCOS" };
 }
 
 Deno.serve(async (req: Request) => {
@@ -136,8 +205,8 @@ Deno.serve(async (req: Request) => {
     const patients = rows.map((row, index) => {
       const mapped = mapCSVToPatient(row);
       if (!mapped) return null;
-      const risk = calculatePCOSRisk(mapped);
-      const phenotype = determinePhenotype(mapped);
+      const risk = buildRisk(mapped);
+      const phenotype = buildPhenotype(mapped);
       return { rowId: index + 1, patientData: mapped, riskScore: risk.score, riskLevel: risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low", phenotype: phenotype.type, phenotypeName: phenotype.name, factors: risk.factors };
     }).filter(Boolean);
     const summary = {
