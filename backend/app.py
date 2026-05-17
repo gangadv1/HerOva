@@ -135,6 +135,25 @@ def get_model_error() -> Optional[str]:
     return MODEL_ERROR
 
 
+def parse_request_payload() -> Dict[str, Any]:
+    payload = request.get_json(silent=True)
+    if payload is None:
+        try:
+            payload = json.loads(request.data.decode("utf-8") or "{}")
+        except Exception:
+            payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return payload
+
+
+def get_request_data(payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = payload.get("data")
+    if isinstance(data, dict):
+        return data
+    return payload
+
+
 def extract_features(data: Dict[str, Any]) -> Dict[str, float]:
     return {key: to_float(data.get(key)) for key in FEATURE_ORDER}
 
@@ -460,14 +479,19 @@ def health_check() -> Any:
     return jsonify({"service": "HerOva backend", "status": "ok", "modelPath": MODEL_PATH})
 
 
+@app.errorhandler(Exception)
+def handle_uncaught_exception(error: Exception) -> Any:
+    return (
+        jsonify({"success": False, "error": "Internal Server Error", "message": str(error)}),
+        500,
+    )
+
+
 @app.route("/predict", methods=["POST"])
 def predict() -> Any:
-    payload = request.get_json(silent=True)
-    if not payload:
-        return jsonify({"success": False, "error": "Missing JSON payload."}), 400
-
-    data = payload.get("data")
-    if not isinstance(data, dict):
+    payload = parse_request_payload()
+    data = get_request_data(payload)
+    if not isinstance(data, dict) or not data:
         return jsonify({"success": False, "error": "`data` object is required."}), 400
 
     features = extract_features(data)
@@ -477,12 +501,9 @@ def predict() -> Any:
 
 @app.route("/analyze", methods=["POST"])
 def analyze() -> Any:
-    payload = request.get_json(silent=True)
-    if not payload:
-        return jsonify({"success": False, "error": "Missing JSON payload."}), 400
-
-    data = payload.get("data")
-    if not isinstance(data, dict):
+    payload = parse_request_payload()
+    data = get_request_data(payload)
+    if not isinstance(data, dict) or not data:
         return jsonify({"success": False, "error": "`data` object is required."}), 400
 
     features = extract_features(data)
