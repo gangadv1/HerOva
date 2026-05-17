@@ -8,10 +8,12 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 import joblib
 import numpy as np
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": ["*"], "methods": ["GET", "POST", "OPTIONS"]}})
 BASE_DIR = os.path.dirname(__file__)
 MODEL_PATH = os.environ.get("MODEL_PATH", os.path.join(BASE_DIR, "models", "pcos_xgboost_model.joblib"))
 DATABASE_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "data.db"))
