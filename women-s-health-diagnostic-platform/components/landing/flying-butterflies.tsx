@@ -23,9 +23,11 @@ const butterflyPalettes = [
 
 export function FlyingButterflies() {
   return (
-    <div className="pointer-events-none fixed inset-0 z-10 overflow-hidden">
+    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       {butterflies.map((butterfly, index) => {
         const palette = butterflyPalettes[index % butterflyPalettes.length]
+        const flap = `${(0.22 + (index % 5) * 0.03).toFixed(3)}s`
+        const wingPhase = `${(index % 2 === 0 ? -0.18 : 0.18 + (index % 5) * 0.04).toFixed(3)}s`
 
         return (
         <span
@@ -38,6 +40,8 @@ export function FlyingButterflies() {
             height: `${butterfly.size}px`,
             animationDuration: `${butterfly.duration}s`,
             animationDelay: butterfly.delay,
+            "--flap": flap,
+            "--wing-phase": wingPhase,
           }}
         >
           <svg viewBox="0 0 64 64" className="butterfly-trail absolute inset-0 h-full w-full">
