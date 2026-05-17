@@ -115,10 +115,13 @@ function toNumber(value: unknown): number {
 
 function toBoolean(value: unknown): boolean {
   if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
+  if (typeof value === "number") return value > 0;
   if (typeof value === "string") {
     const normalized = value.trim().toLowerCase();
-    return ["y", "yes", "true", "1", "i", "irregular"].includes(normalized);
+    if (!normalized) return false;
+    if (["y", "yes", "true", "positive", "present", "i", "irregular"].includes(normalized)) return true;
+    const numeric = Number(normalized);
+    return Number.isFinite(numeric) ? numeric > 0 : false;
   }
   return false;
 }
@@ -132,7 +135,10 @@ function getField(row: Record<string, string>, candidates: string[], fallback = 
 
 function isYesLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
-  return ["1", "y", "yes", "true"].includes(normalized);
+  if (!normalized) return false;
+  if (["y", "yes", "true", "positive", "present"].includes(normalized)) return true;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric > 0 : false;
 }
 
 function isIrregularCycleValue(value: string): boolean {

@@ -22,7 +22,10 @@ interface PatientInput {
 
 function isYesLike(value: string): boolean {
   const normalized = value.trim().toLowerCase();
-  return ["1", "y", "yes", "true"].includes(normalized);
+  if (!normalized) return false;
+  if (["y", "yes", "true", "positive", "present"].includes(normalized)) return true;
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric) ? numeric > 0 : false;
 }
 
 function isIrregularCycleValue(value: string): boolean {
