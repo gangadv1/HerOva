@@ -130,20 +130,29 @@ function getField(row: Record<string, string>, candidates: string[], fallback = 
   return fallback;
 }
 
+function isYesLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return ["1", "y", "yes", "true"].includes(normalized);
+}
+
+function isIrregularCycleValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  const numeric = Number(normalized);
+  return normalized === "i" || normalized === "irregular" || (Number.isFinite(numeric) && numeric >= 4);
+}
+
 function buildPatientFromUploadedRow(row: Record<string, string>) {
   const weight = toNumber(getField(row, ["Weight (Kg)", "Weight", "weight"]));
   const height = toNumber(getField(row, ["Height(Cm)", "Height (Cm)", "Height", "height"]));
   const bmi = toNumber(getField(row, ["BMI", "bmi"], weight && height ? (weight / ((height / 100) ** 2)).toFixed(1) : "0"));
   const cycleLength = toNumber(getField(row, ["Cycle length(days)", "Cycle_Length", "cycle_length"]));
-  const irregularCycleValue = getField(row, ["Cycle(R/I)", "Irregular_Periods", "irregular_periods"]);
+  const cycleValue = getField(row, ["Cycle(R/I)", "Irregular_Periods", "irregular_periods"]);
   const waist = toNumber(getField(row, ["Waist(inch)", "Waist", "waist"]));
   const hip = toNumber(getField(row, ["Hip(inch)", "Hip", "hip"]));
   const waistHipRatio = toNumber(getField(row, ["Waist:Hip Ratio", "Waist_Hip_Ratio", "waist_hip_ratio"], waist && hip ? (waist / hip).toFixed(2) : "0"));
   const fastingGlucose = toNumber(getField(row, ["RBS(mg/dl)", "RBS", "Glucose", "Fasting_Glucose"]));
   const fsh = toNumber(getField(row, ["FSH(mIU/mL)", "FSH", "fsh"]));
   const lh = toNumber(getField(row, ["LH(mIU/mL)", "LH", "lh"]));
-  const totalTestosterone = toNumber(getField(row, ["PRG(ng/mL)", "PRL(ng/mL)", "Total_Testosterone", "total_testosterone"]));
-  const freeTestosterone = toNumber(getField(row, ["II    beta-HCG(mIU/mL)", "Free_Testosterone", "free_testosterone"]));
   const amh = toNumber(getField(row, ["AMH(ng/mL)", "AMH", "amh"]));
   const prolactin = toNumber(getField(row, ["PRL(ng/mL)", "Prolactin", "prolactin"]));
   const tsh = toNumber(getField(row, ["TSH (mIU/L)", "TSH", "tsh"]));
@@ -153,6 +162,14 @@ function buildPatientFromUploadedRow(row: Record<string, string>) {
   const avgSizeRight = toNumber(getField(row, ["Avg. F size (R) (mm)", "Avg_F_Size_Right", "avg_f_size_right"]));
   const bloodPressureSystolic = toNumber(getField(row, ["BP _Systolic (mmHg)", "BP_Systolic", "bp_systolic"]));
   const bloodPressureDiastolic = toNumber(getField(row, ["BP _Diastolic (mmHg)", "BP_Diastolic", "bp_diastolic"]));
+  const weightGain = isYesLike(getField(row, ["Weight gain(Y/N)", "Weight_Gain", "weight_gain"]));
+  const hairGrowth = isYesLike(getField(row, ["hair growth(Y/N)", "Hirsutism", "hirsutism"]));
+  const skinDarkening = isYesLike(getField(row, ["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"]));
+  const hairLoss = isYesLike(getField(row, ["Hair loss(Y/N)", "Hair_Loss", "hair_loss"]));
+  const pimples = isYesLike(getField(row, ["Pimples(Y/N)", "Acne", "acne"]));
+  const fastFood = isYesLike(getField(row, ["Fast food (Y/N)", "fast_food"]));
+  const regularExercise = isYesLike(getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"]));
+  const cycleIsIrregular = isIrregularCycleValue(cycleValue);
 
   return {
     age: toNumber(getField(row, ["Age (yrs)", "Age", "age"])),
@@ -160,16 +177,16 @@ function buildPatientFromUploadedRow(row: Record<string, string>) {
     height,
     bmi,
     cycleLength,
-    cycleLengthVariability: irregularCycleValue || (cycleLength > 35 ? "irregular" : "regular"),
+    cycleLengthVariability: cycleIsIrregular ? "irregular" : "regular",
     periodDuration: 5,
     ageAtMenarche: 13,
-    irregularPeriods: toBoolean(irregularCycleValue),
-    acne: toBoolean(getField(row, ["Pimples(Y/N)", "Acne", "acne"])),
-    acneSeverity: toBoolean(getField(row, ["Pimples(Y/N)"])) ? "moderate" : "none",
-    hirsutism: toBoolean(getField(row, ["hair growth(Y/N)", "Hirsutism", "hirsutism"])),
-    hirsutismScore: toBoolean(getField(row, ["hair growth(Y/N)"])) ? 1 : 0,
-    hairLoss: toBoolean(getField(row, ["Hair loss(Y/N)", "Hair_Loss", "hair_loss"])),
-    skinDarkening: toBoolean(getField(row, ["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"])),
+    irregularPeriods: cycleIsIrregular,
+    acne: pimples,
+    acneSeverity: pimples ? "moderate" : "none",
+    hirsutism: hairGrowth,
+    hirsutismScore: hairGrowth ? 1 : 0,
+    hairLoss,
+    skinDarkening,
     fastingGlucose,
     insulinLevel: 0,
     homaIr: 0,
@@ -184,9 +201,9 @@ function buildPatientFromUploadedRow(row: Record<string, string>) {
     endometrialThickness: toNumber(getField(row, ["Endometrium (mm)", "Endometrial_Thickness", "endometrial_thickness"])),
     lh,
     fsh,
-    lhFshRatio: toNumber(getField(row, ["FSH/LH", "LH_FSH_Ratio", "lh_fsh_ratio"], fsh ? (lh / fsh).toFixed(2) : "0")),
-    totalTestosterone,
-    freeTestosterone,
+    lhFshRatio: toNumber(getField(row, ["FSH/LH", "LH_FSH_Ratio", "lh_fsh_ratio"], lh > 0 ? (fsh / lh).toFixed(2) : "0")),
+    totalTestosterone: 0,
+    freeTestosterone: 0,
     dheas: 200,
     amh,
     prolactin,
@@ -201,8 +218,9 @@ function buildPatientFromUploadedRow(row: Record<string, string>) {
     betaHcgII: toNumber(getField(row, ["II    beta-HCG(mIU/mL)", "beta_hcg_ii"])),
     vitD3: toNumber(getField(row, ["Vit D3 (ng/mL)", "vit_d3"])),
     prg: toNumber(getField(row, ["PRG(ng/mL)", "prg"])),
-    fastFood: toBoolean(getField(row, ["Fast food (Y/N)", "fast_food"])),
-    regularExercise: toBoolean(getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"])),
+    weightGain,
+    fastFood,
+    regularExercise,
   };
 }
 
@@ -211,23 +229,27 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
   const factors: string[] = [];
 
   if (patient.cycleLength > 35 || patient.irregularPeriods) {
-    score += 20;
+    score += 18;
     factors.push("Irregular or prolonged cycles");
   }
+  if (patient.weightGain) {
+    score += 8;
+    factors.push("Weight gain");
+  }
   if (patient.hirsutism || patient.acne || patient.hairLoss || patient.skinDarkening) {
-    score += 20;
+    score += 16;
     factors.push("Clinical hyperandrogenism");
   }
-  if (patient.amh > 6) {
-    score += 10;
+  if (patient.amh >= 4) {
+    score += 12;
     factors.push("Elevated AMH");
   }
-  if (patient.lhFshRatio > 2 || (patient.lh && patient.fsh && patient.lh / patient.fsh > 2)) {
-    score += 10;
-    factors.push("Elevated LH:FSH ratio");
+  if (patient.lhFshRatio >= 2 || (patient.lh > 0 && patient.fsh / patient.lh >= 2)) {
+    score += 12;
+    factors.push("Elevated FSH:LH ratio");
   }
   if (patient.follicleCountLeft >= 12 || patient.follicleCountRight >= 12) {
-    score += 20;
+    score += 18;
     factors.push("Polycystic ovarian morphology");
   }
   if (patient.bmi >= 25 || patient.weight > 0 && patient.weight / ((patient.height / 100) ** 2) >= 25) {
@@ -237,6 +259,10 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
   if (patient.waistHipRatio > 0.85) {
     score += 5;
     factors.push("Increased waist-to-hip ratio");
+  }
+  if (patient.fastingGlucose >= 110) {
+    score += 8;
+    factors.push("Elevated glucose");
   }
   if (patient.fastFood) {
     score += 3;
@@ -292,6 +318,7 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
     summary: {
       totalRows: rows.length,
       processedPatients: patients.length,
+      pcosPositive: patients.filter((patient) => patient.phenotype !== "NA").length,
       highRisk: patients.filter((patient) => patient.riskLevel === "high").length,
       moderateRisk: patients.filter((patient) => patient.riskLevel === "moderate").length,
       lowRisk: patients.filter((patient) => patient.riskLevel === "low").length,
@@ -381,6 +408,7 @@ export interface CSVUploadResult {
   summary: {
     totalRows: number;
     processedPatients: number;
+    pcosPositive: number;
     highRisk: number;
     moderateRisk: number;
     lowRisk: number;

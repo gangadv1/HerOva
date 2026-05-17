@@ -263,10 +263,14 @@ export default function CSVUploadPage() {
               exit={{ opacity: 0, y: -20 }}
             >
               {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
                 <Card className="glass border-border/50 p-4 text-center">
                   <p className="text-xs text-muted-foreground mb-1">Total Rows</p>
                   <p className="text-2xl font-bold text-foreground">{result.summary.totalRows}</p>
+                </Card>
+                <Card className="glass border-cyan-500/20 p-4 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">PCOS Positive</p>
+                  <p className="text-2xl font-bold text-cyan-300">{result.summary.pcosPositive}</p>
                 </Card>
                 <Card className="glass border-pink-500/20 p-4 text-center">
                   <p className="text-xs text-muted-foreground mb-1">High Risk</p>

@@ -20,6 +20,17 @@ interface PatientInput {
   dheas: number; amh: number; prolactin: number; tsh: number;
 }
 
+function isYesLike(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return ["1", "y", "yes", "true"].includes(normalized);
+}
+
+function isIrregularCycleValue(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  const numeric = Number(normalized);
+  return normalized === "i" || normalized === "irregular" || (Number.isFinite(numeric) && numeric >= 4);
+}
+
 function detectDelimiter(headerLine: string): string {
   if (headerLine.includes("\t")) return "\t";
   if (headerLine.includes(";")) return ";";
@@ -124,20 +135,28 @@ function mapCSVToPatient(row: Record<string, unknown>): Partial<PatientInput> | 
     const hip = toNum(get(["Hip(inch)", "Hip", "hip"], 90));
     const folLeft = toNum(get(["Follicle No. (L)", "Follicle_Count_Left", "follicle_count_left"], 10));
     const folRight = toNum(get(["Follicle No. (R)", "Follicle_Count_Right", "follicle_count_right"], 10));
+    const weightGain = isYesLike(String(get(["Weight gain(Y/N)", "Weight_Gain", "weight_gain"], false)));
+    const hairGrowth = isYesLike(String(get(["hair growth(Y/N)", "Hirsutism", "hirsutism"], false)));
+    const skinDarkening = isYesLike(String(get(["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"], false)));
+    const hairLoss = isYesLike(String(get(["Hair loss(Y/N)", "Hair_Loss", "hair_loss"], false)));
+    const pimples = isYesLike(String(get(["Pimples(Y/N)", "Acne", "acne"], false)));
+    const fastFood = isYesLike(String(get(["Fast food (Y/N)", "fast_food"], false)));
+    const regularExercise = isYesLike(String(get(["Reg.Exercise(Y/N)", "regular_exercise"], false)));
+    const cycleIsIrregular = isIrregularCycleValue(cycleValue);
     return {
       age: toNum(get(["Age (yrs)", "Age", "age"], 28)), weight, height,
       bmi: toNum(get(["BMI", "bmi"], (weight / (height / 100) ** 2).toFixed(1))),
       cycleLength: toNum(get(["Cycle length(days)", "Cycle_Length", "cycle_length"], 28)),
-      cycleLengthVariability: cycleValue.toLowerCase() === "i" ? "irregular" : String(get(["Cycle_Variability", "cycle_variability"], "regular")),
+      cycleLengthVariability: cycleIsIrregular ? "irregular" : String(get(["Cycle_Variability", "cycle_variability"], "regular")),
       periodDuration: toNum(get(["Period_Duration", "period_duration"], 5)),
       ageAtMenarche: toNum(get(["Age_Menarche", "age_menarche"], 13)),
-      irregularPeriods: cycleValue.toLowerCase() === "i" || toBool(get(["Irregular_Periods", "irregular_periods", "Irregular"], false)),
-      acne: toBool(get(["Pimples(Y/N)", "Acne", "acne"], false)),
-      acneSeverity: toBool(get(["Pimples(Y/N)", "Pimples"], false)) ? "moderate" : String(get(["Acne_Severity", "acne_severity"], "none")),
-      hirsutism: toBool(get(["hair growth(Y/N)", "Hirsutism", "hirsutism"], false)),
-      hirsutismScore: toNum(get(["hair growth(Y/N)", "Hirsutism_Score", "hirsutism_score", "FG_Score"], 0)),
-      hairLoss: toBool(get(["Hair loss(Y/N)", "Hair_Loss", "hair_loss"], false)),
-      skinDarkening: toBool(get(["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening", "Acanthosis_Nigricans"], false)),
+      irregularPeriods: cycleIsIrregular || toBool(get(["Irregular_Periods", "irregular_periods", "Irregular"], false)),
+      acne: pimples,
+      acneSeverity: pimples ? "moderate" : String(get(["Acne_Severity", "acne_severity"], "none")),
+      hirsutism: hairGrowth,
+      hirsutismScore: hairGrowth ? 1 : 0,
+      hairLoss,
+      skinDarkening,
       fastingGlucose, insulinLevel,
       homaIr: toNum(get(["HOMA_IR", "homa_ir", "HOMA"], (insulinLevel * fastingGlucose) / 405)),
       waistCircumference: waist,
@@ -150,12 +169,16 @@ function mapCSVToPatient(row: Record<string, unknown>): Partial<PatientInput> | 
       polycysticAppearance: folLeft >= 12 || folRight >= 12 || toBool(get(["Polycystic", "polycystic", "PCO_Appearance"], false)),
       endometrialThickness: toNum(get(["Endometrium (mm)", "Endometrial_Thickness", "endometrial_thickness"], 8)),
       lh, fsh, lhFshRatio: toNum(get(["LH_FSH_Ratio", "lh_fsh_ratio"], lh / fsh)),
-      totalTestosterone: toNum(get(["PRG(ng/mL)", "Total_Testosterone", "total_testosterone", "Testosterone"], 40)),
-      freeTestosterone: toNum(get(["II    beta-HCG(mIU/mL)", "Free_Testosterone", "free_testosterone"], 2)),
+      totalTestosterone: 0,
+      freeTestosterone: 0,
       dheas: toNum(get(["DHEAS", "dheas"], 200)),
       amh: toNum(get(["AMH(ng/mL)", "AMH", "amh"], 4)),
       prolactin: toNum(get(["PRL(ng/mL)", "Prolactin", "prolactin"], 12)),
       tsh: toNum(get(["TSH (mIU/L)", "TSH", "tsh"], 2)),
+      prg: toNum(get(["PRG(ng/mL)", "prg"], 0)),
+      weightGain,
+      fastFood,
+      regularExercise,
     };
   } catch { return null; }
 }
@@ -163,14 +186,15 @@ function mapCSVToPatient(row: Record<string, unknown>): Partial<PatientInput> | 
 function buildRisk(data: Partial<PatientInput>) {
   let score = 0;
   const factors: string[] = [];
-  if (data.irregularPeriods || (data.cycleLength && data.cycleLength > 35)) { score += 20; factors.push("Irregular or prolonged cycles"); }
-  if (data.hirsutism || data.acne || data.hairLoss || data.skinDarkening) { score += 20; factors.push("Clinical hyperandrogenism"); }
-  if ((data.totalTestosterone && data.totalTestosterone > 50) || (data.freeTestosterone && data.freeTestosterone > 3)) { score += 15; factors.push("Elevated androgen marker"); }
-  if (data.polycysticAppearance || (data.follicleCountLeft && data.follicleCountLeft >= 12) || (data.follicleCountRight && data.follicleCountRight >= 12) || (data.ovaryVolumeLeft && data.ovaryVolumeLeft > 10) || (data.ovaryVolumeRight && data.ovaryVolumeRight > 10)) { score += 20; factors.push("Polycystic ovarian morphology"); }
-  if (data.lhFshRatio && data.lhFshRatio > 2) { score += 10; factors.push("Elevated LH:FSH ratio"); }
-  if (data.amh && data.amh > 6) { score += 10; factors.push("Elevated AMH"); }
-  if (data.homaIr && data.homaIr > 2.5) { score += 10; factors.push("Insulin resistance"); }
-  if (data.bloodPressureSystolic && data.bloodPressureSystolic >= 130 || data.bloodPressureDiastolic && data.bloodPressureDiastolic >= 85) { score += 5; factors.push("Elevated blood pressure"); }
+  if (data.irregularPeriods || (data.cycleLength && data.cycleLength > 35)) { score += 18; factors.push("Irregular or prolonged cycles"); }
+  if ((data as { weightGain?: boolean }).weightGain) { score += 8; factors.push("Weight gain"); }
+  if (data.hirsutism || data.acne || data.hairLoss || data.skinDarkening) { score += 16; factors.push("Clinical hyperandrogenism"); }
+  if (data.amh && data.amh >= 4) { score += 12; factors.push("Elevated AMH"); }
+  if (data.lhFshRatio && data.lhFshRatio >= 2) { score += 12; factors.push("Elevated FSH:LH ratio"); }
+  if (data.polycysticAppearance || (data.follicleCountLeft && data.follicleCountLeft >= 12) || (data.follicleCountRight && data.follicleCountRight >= 12) || (data.ovaryVolumeLeft && data.ovaryVolumeLeft > 10) || (data.ovaryVolumeRight && data.ovaryVolumeRight > 10)) { score += 18; factors.push("Polycystic ovarian morphology"); }
+  if (data.bmi && data.bmi >= 25) { score += 10; factors.push("Elevated BMI"); }
+  if (data.waistCircumference && data.homaIr && data.homaIr > 2.5) { score += 5; factors.push("Insulin resistance"); }
+  if ((data.bloodPressureSystolic && data.bloodPressureSystolic >= 130) || (data.bloodPressureDiastolic && data.bloodPressureDiastolic >= 85)) { score += 5; factors.push("Elevated blood pressure"); }
   return { score: Math.min(score, 100), factors };
 }
 
@@ -211,6 +235,7 @@ Deno.serve(async (req: Request) => {
     }).filter(Boolean);
     const summary = {
       totalRows: rows.length, processedPatients: patients.length,
+      pcosPositive: patients.filter(p => p && p.phenotype !== "NA").length,
       highRisk: patients.filter(p => p && p.riskLevel === "high").length,
       moderateRisk: patients.filter(p => p && p.riskLevel === "moderate").length,
       lowRisk: patients.filter(p => p && p.riskLevel === "low").length,
