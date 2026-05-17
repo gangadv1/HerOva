@@ -28,7 +28,7 @@ function getHeaders(): Record<string, string> {
 
 async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
   if (!SUPABASE_URL) {
-    throw new Error("SUPABASE_URL is not set. Please set NEXT_PUBLIC_SUPABASE_URL in your environment.");
+    throw new Error("SUPABASE_URL is not set. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment. See README for setup.");
   }
 
   const response = await fetch(`${SUPABASE_URL}/functions/v1/${endpoint}`, {
@@ -240,6 +240,9 @@ export const healthApi = {
       : apiCall<FullAnalysisResult>("analyze", data),
 
   csvUpload: async (file: File): Promise<CSVUploadResult> => {
+    if (!SUPABASE_URL) {
+      throw new Error("SUPABASE_URL is not set. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment before uploading CSVs.");
+    }
     const formData = new FormData();
     formData.append("file", file);
 
@@ -295,3 +298,7 @@ export const healthApi = {
         : apiCall<SessionResult>("session", { action: "get-results", sessionId }),
   },
 };
+
+export function isSupabaseConfigured() {
+  return !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+}
