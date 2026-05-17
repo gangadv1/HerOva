@@ -12,12 +12,27 @@ function getEnvVar(keys: string[]): string {
   return "";
 }
 
+const BACKEND_URL = getEnvVar(["NEXT_PUBLIC_BACKEND_URL", "NEXT_PUBLIC_BACKEND_API_URL"]);
 const SUPABASE_URL = getEnvVar(["NEXT_PUBLIC_SUPABASE_URL", "VITE_SUPABASE_URL"]);
 const SUPABASE_ANON_KEY = getEnvVar(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
 
-const USE_MOCK = !SUPABASE_URL && typeof process !== "undefined" && process.env.NODE_ENV === "development";
+const USE_BACKEND = !!BACKEND_URL;
+const USE_SUPABASE = !!SUPABASE_URL;
+const USE_MOCK = !USE_BACKEND && !USE_SUPABASE && typeof process !== "undefined" && process.env.NODE_ENV === "development";
+
+function getApiUrl(endpoint: string): string {
+  if (USE_BACKEND) {
+    return `${BACKEND_URL.replace(/\/$/, "")}/${endpoint}`;
+  }
+  return `${SUPABASE_URL}/functions/v1/${endpoint}`;
+}
 
 function getHeaders(): Record<string, string> {
+  if (USE_BACKEND) {
+    return {
+      "Content-Type": "application/json",
+    };
+  }
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
@@ -26,11 +41,11 @@ function getHeaders(): Record<string, string> {
 }
 
 async function apiCall<T>(endpoint: string, body: unknown): Promise<T> {
-  if (!SUPABASE_URL) {
-    throw new Error("SUPABASE_URL is not set. Please set NEXT_PUBLIC_SUPABASE_URL in your environment.");
+  if (!USE_BACKEND && !SUPABASE_URL) {
+    throw new Error("No backend or Supabase URL is configured. Please set NEXT_PUBLIC_BACKEND_URL or NEXT_PUBLIC_SUPABASE_URL.");
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${endpoint}`, {
+  const response = await fetch(getApiUrl(endpoint), {
     method: "POST",
     headers: getHeaders(),
     body: JSON.stringify(body),

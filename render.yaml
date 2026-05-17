@@ -3,7 +3,7 @@ services:
     name: herova-backend
     env: python
     plan: starter
-    branch: main
+    branch: feature/backend-render
     buildCommand: pip install -r backend/models/requirements.txt
     startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT backend.app:app
     envVars:
