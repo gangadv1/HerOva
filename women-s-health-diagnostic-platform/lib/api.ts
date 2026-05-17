@@ -15,7 +15,8 @@ function getEnvVar(keys: string[]): string {
 const SUPABASE_URL = getEnvVar(["NEXT_PUBLIC_SUPABASE_URL", "VITE_SUPABASE_URL"]);
 const SUPABASE_ANON_KEY = getEnvVar(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
 
-const USE_MOCK = !SUPABASE_URL && typeof process !== "undefined" && process.env.NODE_ENV === "development";
+// Disable mock mode: always call real backend functions using SUPABASE_URL
+const USE_MOCK = false;
 
 function getHeaders(): Record<string, string> {
   return {
