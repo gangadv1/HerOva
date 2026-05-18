@@ -98,6 +98,8 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
   }
 
   const { prediction, phenotype, shap, clustering, confidenceMetrics, recommendations } = analysis
+  const phenotypeDisplay = (analysis as any).phenotypeDisplay
+  const differential = (analysis as any).differential
 
   const getRiskColor = (level: string) => {
     if (level === "high") return "pink"
@@ -282,6 +284,46 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                     </Badge>
                   </div>
                 ))}
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Differential Diagnosis */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-8">
+          <Card className="glass border-rose-500/20 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-foreground">Differential Diagnosis</h3>
+                <p className="text-sm text-muted-foreground">Comparison: PCOS vs Endometriosis vs Healthy</p>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-3">Condition Probability</h4>
+                <div className="space-y-2">
+                  {differential?.probabilities ? Object.entries(differential.probabilities).map(([cond, pct]) => (
+                    <div key={cond} className="flex items-center justify-between p-3 rounded-lg bg-muted/10 border border-border">
+                      <span className="text-sm text-foreground">{cond}</span>
+                      <span className="text-sm font-semibold text-foreground">{pct}%</span>
+                    </div>
+                  )) : (
+                    <div className="text-sm text-muted-foreground">Differential not available</div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-3">Most influential distinguishing features</h4>
+                <div className="space-y-2">
+                  {(differential?.topDistinguishingFeatures ?? phenotypeDisplay?.characteristics ?? ["elevated AMH","irregular ovulation","follicle count"]).slice(0,5).map((f) => (
+                    <div key={f} className="flex items-center gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
+                      <span className="text-sm text-foreground">{f}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </Card>

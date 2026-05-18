@@ -756,6 +756,15 @@ export interface FullAnalysisResult {
     name: string;
     description: string;
   };
+  phenotypeDisplay?: {
+    displayName?: string;
+    type?: string;
+    characteristics?: string[];
+  };
+  differential?: {
+    probabilities?: { [key: string]: number };
+    topDistinguishingFeatures?: string[];
+  };
   rotterdamEvaluation: RotterdamEvaluation;
   shap: {
     values: Array<{
