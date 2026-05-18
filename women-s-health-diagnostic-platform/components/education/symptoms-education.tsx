@@ -34,14 +34,19 @@ export default function SymptomsEducation() {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div className="space-y-2">
+      <div className="space-y-3">
         <h4 className="text-lg font-semibold">Understanding Your Symptoms</h4>
         <p className="text-sm text-muted-foreground">Tap a symptom to learn the hormonal explanation, affected pathways, and when to seek care.</p>
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 space-y-3">
           {items.map((it) => (
-            <button key={it.key} onClick={() => setSelected(it.key)} className={`w-full text-left p-3 rounded-lg border transition ${selected === it.key ? "bg-purple-500/10 border-purple-500" : "bg-muted/10 border-border"}`}>
-              <div className="font-medium">{it.label}</div>
-              <div className="text-xs text-muted-foreground">Tap to learn more</div>
+            <button
+              key={it.key}
+              onClick={() => setSelected(it.key)}
+              aria-pressed={selected === it.key}
+              className={`w-full text-left p-4 rounded-lg border transition-flex focus:outline-none focus:ring-2 focus:ring-purple-400 ${selected === it.key ? "bg-purple-500/10 border-purple-500" : "bg-muted/10 border-border"}`}
+            >
+              <div className="font-medium text-base">{it.label}</div>
+              <div className="text-sm text-muted-foreground">Tap to learn more</div>
             </button>
           ))}
         </div>
