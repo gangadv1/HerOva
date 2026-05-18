@@ -41,56 +41,34 @@ def evaluate_rotterdam_criteria(patient_data):
 
     rotterdam_positive = len(criteria_met) >= 2
 
-    # --------------------------------------------------------
     # PHENOTYPE CLASSIFICATION
-    # --------------------------------------------------------
+    has_hyper = any(c.lower().startswith("hyper") for c in criteria_met)
 
-        # ============================================================
-    # IMPROVED PHENOTYPE ASSIGNMENT
-    # ============================================================
+    # Safer checks for ovulatory dysfunction and polycystic ovaries
+    has_ovulatory = False
+    for c in criteria_met:
+        lc = c.lower()
+        if "ovulatory" in lc or "ovulation" in lc or "ovulatory dysfunction" in lc:
+            has_ovulatory = True
+            break
 
-    bmi = patient_data.get("BMI", 22)
-    amh = patient_data.get("AMH", 3)
+    has_ovaries = any("ovaries" in c.lower() or "polycystic" in c.lower() for c in criteria_met)
 
-    # TYPE A
-    # Hyperandrogenism + ovulatory dysfunction + PCO
-
+    phenotype = "Unknown"
     if has_hyper and has_ovulatory and has_ovaries:
-
         phenotype = "Type A - Classic Hyperandrogenic PCOS"
-
-
-    # TYPE B
-    # Hyperandrogenism + ovulatory dysfunction
-    # without obvious polycystic ovaries
-
     elif has_hyper and has_ovulatory and not has_ovaries:
-
         phenotype = "Type B - Non-PCO PCOS"
-
-
-    # TYPE C
-    # Ovulatory phenotype with ovarian morphology
-
     elif has_hyper and has_ovaries and not has_ovulatory:
-
         phenotype = "Type C - Ovulatory PCOS"
-
-
-    # TYPE D
-    # Normo-androgenic phenotype
-
     elif has_ovulatory and has_ovaries and not has_hyper:
-
         phenotype = "Type D - Normo-androgenic PCOS"
-
-    # --------------------------------------------------------
-    # RETURN RESULTS
-    # --------------------------------------------------------
+    else:
+        phenotype = "Non-PCOS"
 
     return {
         "criteria_met": criteria_met,
         "criteria_count": len(criteria_met),
         "rotterdam_positive": rotterdam_positive,
-        "phenotype": phenotype
+        "phenotype": phenotype,
     }
