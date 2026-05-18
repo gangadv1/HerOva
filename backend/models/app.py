@@ -523,8 +523,40 @@ def _clusters(patient: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, A
 		{"clusterId": 4, "clusterName": "Non-PCOS Control", "description": "Does not meet Rotterdam criteria.", "patientCount": 1 if not has_oligo and not has_ha and not has_pcom else 0, "characteristics": ["Regular cycles", "Normal androgens", "Normal ovarian morphology"], "riskProfile": "No PCOS diagnosis indicated", "metabolicRisk": "low"},
 	]
 
+	# Map cluster IDs to higher-level interpretations and phenotype types
+	id_to_interpretation = {
+		0: {"interpretation": "insulin resistant", "mappedType": "Type A", "display": "Type A — Classic hyperandrogenic PCOS", "characteristics": ["elevated AMH", "irregular ovulation", "insulin resistance", "inflammatory profile"]},
+		1: {"interpretation": "hyperandrogenic", "mappedType": "Type B", "display": "Type B — Hyperandrogenic PCOS", "characteristics": ["elevated testosterone", "hirsutism", "irregular cycles"]},
+		2: {"interpretation": "inflammatory", "mappedType": "Type C", "display": "Type C — Inflammatory / Ovulatory PCOS", "characteristics": ["inflammatory markers", "pelvic pain signals", "PCOM"]},
+		3: {"interpretation": "lean PCOS", "mappedType": "Type D", "display": "Type D — Lean / Normo-androgenic PCOS", "characteristics": ["normal BMI", "irregular cycles", "PCOM"]},
+		4: {"interpretation": "control", "mappedType": "N/A", "display": "Non-PCOS Control", "characteristics": []},
+	}
+
+	# Attach interpretation info to each cluster entry
+	for c in clusters:
+		meta = id_to_interpretation.get(c["clusterId"], {})
+		c["interpretation"] = meta.get("interpretation")
+		c["mappedType"] = meta.get("mappedType")
+		c["phenotypeDisplay"] = meta.get("display")
+		# Merge characteristic lists (unique)
+		merged_chars = list(dict.fromkeys((c.get("characteristics", []) or []) + (meta.get("characteristics", []) or [])))
+		c["characteristics"] = merged_chars
+
 	assigned = next((cluster for cluster in clusters if cluster["patientCount"] > 0), clusters[-1])
-	return assigned, clusters
+
+	# Ensure the assigned cluster exposes the phenotype mapping succinctly
+	assigned_summary = {
+		"clusterId": assigned["clusterId"],
+		"clusterName": assigned["clusterName"],
+		"interpretation": assigned.get("interpretation"),
+		"mappedType": assigned.get("mappedType"),
+		"phenotypeDisplay": assigned.get("phenotypeDisplay"),
+		"characteristics": assigned.get("characteristics", []),
+		"riskProfile": assigned.get("riskProfile"),
+		"metabolicRisk": assigned.get("metabolicRisk"),
+	}
+
+	return assigned_summary, clusters
 
 
 def _differential_diagnosis(patient: dict[str, Any], probability: float, phenotype: dict[str, str]) -> dict[str, Any]:
@@ -616,6 +648,12 @@ def analyze() -> tuple[Any, int]:
 	analysis = _analyze_single(payload)
 	shap_values, top_contributors = _shap_like_values(analysis["patient"])
 	assigned_cluster, all_clusters = _clusters(analysis["patient"])
+	# Provide phenotype display details based on clustering mapping
+	phenotype_display = {
+		"displayName": assigned_cluster.get("phenotypeDisplay"),
+		"type": assigned_cluster.get("mappedType"),
+		"characteristics": assigned_cluster.get("characteristics", []),
+	}
 	return jsonify(
 		{
 			"success": True,
@@ -625,6 +663,7 @@ def analyze() -> tuple[Any, int]:
 				"contributingFactors": analysis["contributingFactors"],
 			},
 			"phenotype": analysis["phenotype"],
+			"phenotypeDisplay": phenotype_display,
 			"shap": {"values": shap_values, "topContributors": top_contributors},
 			"clustering": {
 				"assignedCluster": {
