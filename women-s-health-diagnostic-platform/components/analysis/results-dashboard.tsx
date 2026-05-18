@@ -101,6 +101,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
   const phenotypeDisplay = (analysis as any).phenotypeDisplay
   const differential = (analysis as any).differential
   const biological = (analysis as any).biologicalInsights
+  const nextInvestigations = (analysis as any).nextInvestigations ?? []
 
   const getRiskColor = (level: string) => {
     if (level === "high") return "pink"
@@ -434,6 +435,18 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                     <span className="text-sm text-foreground">{rec}</span>
                   </div>
                 ))}
+                <div className="mt-4">
+                  <h5 className="text-sm font-semibold text-foreground mb-2">Suggested next investigations</h5>
+                  <div className="space-y-2">
+                    {nextInvestigations.length > 0 ? nextInvestigations.map((test, i) => (
+                      <div key={test} className="flex items-center gap-3 p-3 rounded-lg bg-muted/10 border border-border">
+                        <span className="text-sm text-foreground">{test}</span>
+                      </div>
+                    )) : (
+                      <div className="text-sm text-muted-foreground">No additional investigations suggested.</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </Card>
           </motion.div>

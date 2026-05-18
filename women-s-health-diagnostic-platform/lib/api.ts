@@ -769,6 +769,7 @@ export interface FullAnalysisResult {
     pathways?: Array<{ name: string; reason: string }>;
     summary?: string;
   };
+  nextInvestigations?: string[];
   rotterdamEvaluation: RotterdamEvaluation;
   shap: {
     values: Array<{

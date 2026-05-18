@@ -444,6 +444,59 @@ def _recommendations(risk_score: float, phenotype: dict[str, str]) -> list[str]:
 	]
 
 
+def _next_investigations(patient: dict[str, Any], phenotype: dict[str, str], biological: dict[str, Any]) -> list[str]:
+	"""Return a prioritized list of suggested next investigations tailored to the patient.
+
+	The list is conservative and clinician-facing: it suggests commonly ordered tests
+	to clarify metabolic, endocrine, and reproductive status that align with the
+	predicted phenotype and biological pathway signals.
+	"""
+	suggestions: list[str] = []
+
+	# Metabolic / insulin-resistance focused
+	if biological.get("pathways"):
+		names = [p.get("name", "").lower() for p in biological.get("pathways", [])]
+	else:
+		names = []
+
+	if "insulin" in " ".join(names) or patient.get("homaIr", 0) >= 1.5 or patient.get("insulinLevel", 0) >= 12:
+		suggestions.extend(["Fasting insulin", "Oral glucose tolerance test (OGTT)", "HOMA-IR calculation", "HbA1c"])
+
+	# Reproductive / ovarian function
+	if patient.get("amh", 0) >= 2 or patient.get("follicleLeft", 0) >= 10 or patient.get("follicleRight", 0) >= 10:
+		suggestions.extend(["Pelvic ultrasound (transvaginal preferred)", "AMH repeat/confirmation", "Pelvic ultrasound with follicle count documentation"]) 
+
+	# Androgen workup
+	if "androgen" in " ".join(names) or patient.get("totalTestosterone", 0) > 40 or patient.get("freeTestosterone", 0) > 2.5:
+		suggestions.extend(["Testosterone panel (total + free)", "DHEAS level", "17-OH progesterone as appropriate"])
+
+	# Endometriosis / pelvic pain signals
+	if patient.get("pelvicPain") or patient.get("dysmenorrhea"):
+		suggestions.extend(["Transvaginal pelvic ultrasound to assess endometriosis-related findings", "Consider referral for diagnostic laparoscopy if clinically indicated", "Pain and symptom-focused assessment by gynecology"]) 
+
+	# General metabolic and cardiovascular screening
+	if patient.get("bmi", 0) >= 25 or patient.get("rbs", 0) >= 100:
+		suggestions.extend(["Fasting lipid profile", "Liver function tests (ALT/AST)", "Blood pressure monitoring"])
+
+	# Specialist referral if phenotype severe or high risk
+	if phenotype.get("type") in {"A", "B"} or (patient.get("bmi", 0) >= 30 and patient.get("homaIr", 0) > 2):
+		suggestions.append("Referral to reproductive endocrinology / endocrinologist")
+
+	# Deduplicate while preserving order
+	seen = set()
+	deduped = []
+	for s in suggestions:
+		if s not in seen:
+			deduped.append(s)
+			seen.add(s)
+
+	# If nothing suggested, provide a minimal sensible panel
+	if not deduped:
+		deduped = ["Fasting glucose / HbA1c", "Basic hormonal panel (TSH, prolactin)", "Routine pelvic ultrasound if symptoms"]
+
+	return deduped
+
+
 def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 	vector, patient = _build_feature_vector(row)
 	probability = _predict_probability(vector)
@@ -456,6 +509,10 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 	confidence = _confidence_metrics(probability, patient, phenotype)
 	recommendations = _recommendations(risk_score, phenotype)
 	differential = _differential_diagnosis(patient, probability, phenotype)
+	# biological insights and suggested next investigations
+	shap_values, top_contributors = _shap_like_values(patient)
+	biological = _biological_insights(patient, top_contributors, phenotype)
+	next_investigations = _next_investigations(patient, phenotype, biological)
 
 	return {
 		"pcosRiskScore": risk_score,
@@ -464,6 +521,7 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 		"contributingFactors": factors,
 		"confidenceMetrics": confidence,
 		"recommendations": recommendations,
+		"nextInvestigations": next_investigations,
 		"patient": patient,
 		"probability": probability,
 		"modelScore": model_score,
