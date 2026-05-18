@@ -9,6 +9,7 @@ import joblib
 import numpy as np
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import clinical_rules
 
 
 app = Flask(__name__)
@@ -393,20 +394,16 @@ def _clinical_risk_score(patient: dict[str, Any]) -> int:
 	return int(round(_clamp(score)))
 
 
-def _phenotype(patient: dict[str, Any]) -> dict[str, str]:
-	has_oligo = patient["cycleLength"] > 35 or patient["cycleValue"] >= 1
-	has_ha = patient["hairGrowth"] or patient["pimples"] or patient["hairLoss"] or patient["skinDarkening"]
-	has_pcom = patient["follicleLeft"] >= 12 or patient["follicleRight"] >= 12
+def _phenotype(patient: dict[str, Any], model_probability: float | None = None) -> dict[str, str]:
+	"""Wrapper that delegates to `clinical_rules.evaluate_rotterdam`.
 
-	if has_oligo and has_ha and has_pcom:
-		return {"type": "A", "name": "Frank/Classic PCOS", "description": "All three Rotterdam criteria present - most severe phenotype with highest metabolic risk"}
-	if has_oligo and has_ha:
-		return {"type": "B", "name": "Non-PCO PCOS", "description": "Oligomenorrhea and hyperandrogenism without polycystic morphology"}
-	if has_ha and has_pcom:
-		return {"type": "C", "name": "Ovulatory PCOS", "description": "Hyperandrogenism and PCOM with regular cycles - often milder metabolic profile"}
-	if has_oligo and has_pcom:
-		return {"type": "D", "name": "Non-Hyperandrogenic PCOS", "description": "Oligomenorrhea and PCOM without hyperandrogenism - mildest phenotype"}
-	return {"type": "N/A", "name": "Uncertain", "description": "Does not meet Rotterdam criteria for PCOS diagnosis"}
+	Returns a compact dict compatible with the rest of this module
+	(keys: `type`, `name`, `description`). The rules engine produces
+	additional detail which is preserved elsewhere if needed.
+	"""
+	result = clinical_rules.evaluate_rotterdam(patient, model_probability)
+	# Keep compatibility with existing callers expecting a small dict
+	return {"type": result.get("type", "N/A"), "name": result.get("name", ""), "description": result.get("description", "")}
 
 
 def _confidence_metrics(probability: float, patient: dict[str, Any], phenotype: dict[str, str]) -> dict[str, int]:
@@ -450,7 +447,7 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 	model_score = int(round(probability * 100))
 	clinical_score = _clinical_risk_score(patient)
 	risk_score = int(round(_clamp((model_score * 0.3) + (clinical_score * 0.7))))
-	phenotype = _phenotype(patient)
+	phenotype = _phenotype(patient, probability)
 	risk_level = "high" if risk_score >= 70 else "moderate" if risk_score >= 40 else "low"
 	factors = _has_risk_signal(patient)
 	confidence = _confidence_metrics(probability, patient, phenotype)
