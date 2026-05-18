@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from clinical_rules import evaluate_rotterdam_criteria
+from backend.clinical_rules import evaluate_rotterdam_criteria
 
 app = FastAPI()
 
