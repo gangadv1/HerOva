@@ -146,7 +146,7 @@ export default function CSVUploadPage() {
       <header className="sticky top-0 z-50 glass border-b border-border/50">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4">
               <Link href="/">
                 <Button variant="ghost" size="icon" className="hover:bg-primary/20">
                   <ArrowLeft className="h-5 w-5" />
@@ -155,14 +155,14 @@ export default function CSVUploadPage() {
               <div>
                 <h1 className="text-xl font-bold flex items-center gap-2">
                   <Logo size="sm" />
-                  <span>Batch Analysis</span>
+                  <span>Population Screening Dashboard</span>
                 </h1>
-                <p className="text-sm text-muted-foreground">CSV Upload & Bulk Processing</p>
+                <p className="text-sm text-muted-foreground">Upload population or clinic data to identify high-risk patients, phenotype distributions, and referral priorities.</p>
               </div>
             </div>
             <Badge variant="outline" className="border-cyan-500/30 text-cyan-300">
               <FileSpreadsheet className="h-3 w-3 mr-1" />
-              CSV Upload
+              Population Screening
             </Badge>
           </div>
         </div>
@@ -382,6 +382,53 @@ export default function CSVUploadPage() {
                   })}
                 </div>
               </Card>
+
+              {/* Risk Heatmap + Referral Queue */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
+                <Card className="glass border-pink-500/20 p-6 lg:col-span-2">
+                  <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-pink-400" />
+                    Risk Heatmap
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-3">Visual overview of individual risk scores (sample of up to 200 patients)</p>
+                  <div className="grid grid-cols-20 gap-1">
+                    {result.patients.slice(0, 200).map((p, idx) => {
+                      const color = p.riskLevel === "high" ? "bg-pink-400" : p.riskLevel === "moderate" ? "bg-yellow-400" : "bg-green-400"
+                      return (
+                        <div key={idx} title={`Row ${p.rowId}: ${p.riskScore}% (${p.riskLevel})`} className={`w-3 h-3 rounded ${color}`} />
+                      )
+                    })}
+                  </div>
+                </Card>
+
+                <Card className="glass border-yellow-500/20 p-6">
+                  <h3 className="font-bold text-foreground mb-4 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-yellow-400" />
+                    Referral Priority Queue
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-3">Top high-risk patients for immediate follow-up</p>
+                  <div className="space-y-2">
+                    {result.patients
+                      .filter((p) => p.riskLevel === "high")
+                      .sort((a, b) => b.riskScore - a.riskScore)
+                      .slice(0, 10)
+                      .map((p) => (
+                        <div key={p.rowId} className="flex items-center justify-between p-2 rounded border border-border/30">
+                          <div>
+                            <div className="text-sm font-medium">#{p.rowId} — Type {p.phenotype}</div>
+                            <div className="text-xs text-muted-foreground">Risk: {p.riskScore}%</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" variant="outline">Refer</Button>
+                          </div>
+                        </div>
+                      ))}
+                    {result.patients.filter((p) => p.riskLevel === "high").length === 0 && (
+                      <div className="text-sm text-muted-foreground">No high-risk patients identified.</div>
+                    )}
+                  </div>
+                </Card>
+              </div>
 
               {/* Patient Results Table */}
               <Card className="glass border-purple-500/20 p-6 mb-8">

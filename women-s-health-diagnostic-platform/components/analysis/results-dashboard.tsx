@@ -15,6 +15,7 @@ import { healthApi, type FullAnalysisResult } from "@/lib/api"
 interface ResultsDashboardProps {
   patientData: PatientData
   onBack: () => void
+  mode?: "full" | "quick" | "telehealth"
 }
 
 export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps) {
@@ -23,6 +24,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [teleSummary, setTeleSummary] = useState<string[] | null>(null)
 
   useEffect(() => {
     const runAnalysis = async () => {
@@ -43,6 +45,44 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
     }
     runAnalysis()
   }, [patientData])
+
+  useEffect(() => {
+    if (mode !== "telehealth") return
+    const buildTele = async () => {
+      // Try backend patient summary first, fallback to local summary
+      try {
+        const remote = await healthApi.patientSummary(patientData)
+        if (remote && (remote as any).teleSummary) {
+          setTeleSummary((remote as any).teleSummary as string[])
+          return
+        }
+      } catch {
+        // ignore
+      }
+
+      if (analysis) {
+        const lines: string[] = []
+        const risk = analysis.prediction?.riskLevel ?? "low"
+        const phenotypeType = analysis.phenotype?.type ?? (analysis as any).phenotypeDisplay?.type ?? "NA"
+        if (risk === "high") {
+          lines.push(`High likelihood of Type ${phenotypeType} PCOS`)
+        } else if (risk === "moderate") {
+          lines.push(`Moderate likelihood of Type ${phenotypeType} PCOS`)
+        } else {
+          lines.push(`Low likelihood of PCOS`)
+        }
+
+        // Suggested referrals and tests
+        lines.push("Recommend endocrinology referral")
+        lines.push("Suggested fasting insulin evaluation")
+        lines.push("Follow-up ultrasound recommended when available")
+
+        setTeleSummary(lines)
+      }
+    }
+
+    buildTele()
+  }, [mode, analysis, patientData])
 
   const handleSaveResults = async () => {
     if (!sessionId || !analysis) return
@@ -98,6 +138,10 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
   }
 
   const { prediction, phenotype, shap, clustering, confidenceMetrics, recommendations } = analysis
+  const phenotypeDisplay = (analysis as any).phenotypeDisplay
+  const differential = (analysis as any).differential
+  const biological = (analysis as any).biologicalInsights
+  const nextInvestigations = (analysis as any).nextInvestigations ?? []
 
   const getRiskColor = (level: string) => {
     if (level === "high") return "pink"
@@ -109,6 +153,21 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
 
   return (
     <div className="min-h-screen bg-background">
+      {mode === "quick" && (
+        <div className="bg-yellow-50 border-b border-yellow-200 p-4 text-sm text-yellow-800">
+          Quick Screening Mode: Symptom-only assessment (no labs or ultrasound). Use this workflow for low-resource or telehealth settings. Recommendations will suggest next clinical steps and confirmatory testing when needed.
+        </div>
+      )}
+      {mode === "telehealth" && teleSummary && (
+        <div className="bg-cyan-50 border-b border-cyan-200 p-4 text-sm text-cyan-900">
+          <strong>Telehealth Summary:</strong>
+          <ul className="mt-2 list-disc list-inside">
+            {teleSummary.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <header className="border-b border-border/50 glass sticky top-0 z-40">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
@@ -137,6 +196,22 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           <p className="text-muted-foreground max-w-2xl mx-auto">
             Comprehensive analysis powered by ML prediction, SHAP explainability, and phenotype clustering
           </p>
+        </motion.div>
+
+        {/* Prediction + Confidence */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+          <Card className="glass p-4 border-border/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-muted-foreground">Prediction</div>
+                <div className="text-lg font-bold">Type {phenotype.type} — {phenotype.name}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-muted-foreground">Confidence</div>
+                <div className="text-xl font-bold text-foreground">{Math.round((confidenceMetrics?.pcosClassification ?? 0) * 100) / 100}%</div>
+              </div>
+            </div>
+          </Card>
         </motion.div>
 
         {/* Main Results Grid */}
@@ -287,6 +362,66 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </Card>
         </motion.div>
 
+        {/* Differential Diagnosis */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-8">
+          <Card className="glass border-rose-500/20 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-pink-500 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-foreground">Differential Diagnosis</h3>
+                <p className="text-sm text-muted-foreground">Comparison: PCOS vs Endometriosis vs Healthy</p>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-3">Condition Probability</h4>
+                <div className="space-y-2">
+                  {differential?.probabilities ? Object.entries(differential.probabilities).map(([cond, pct]) => (
+                    <div key={cond} className="flex items-center justify-between p-3 rounded-lg bg-muted/10 border border-border">
+                      <span className="text-sm text-foreground">{cond}</span>
+                      <span className="text-sm font-semibold text-foreground">{pct}%</span>
+                    </div>
+                  )) : (
+                    <div className="text-sm text-muted-foreground">Differential not available</div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-3">Most influential distinguishing features</h4>
+                <div className="space-y-2">
+                  {(differential?.topDistinguishingFeatures ?? phenotypeDisplay?.characteristics ?? ["elevated AMH","irregular ovulation","follicle count"]).slice(0,5).map((f) => (
+                    <div key={f} className="flex items-center gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/10">
+                      <span className="text-sm text-foreground">{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="mt-6">
+              <h4 className="text-sm font-medium text-foreground mb-3">Why alternative conditions were deprioritized</h4>
+              <div className="space-y-2">
+                {differential?.explanations ? Object.entries(differential.explanations).map(([cond, expl]) => (
+                  <div key={cond} className="p-3 rounded-lg bg-muted/10 border border-border">
+                    <div className="flex items-center justify-between mb-2">
+                      <strong className="text-sm">{cond}</strong>
+                      <span className="text-sm text-muted-foreground">{differential?.probabilities?.[cond] ?? "--"}%</span>
+                    </div>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground">
+                      {(Array.isArray(expl) ? expl : [String(expl)]).map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )) : (
+                  <div className="text-sm text-muted-foreground">No alternative-condition explanations available.</div>
+                )}
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
         {/* SHAP Feature Importance */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="mb-8">
           <Card className="glass border-purple-500/20 p-6">
@@ -315,6 +450,35 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                   </div>
                 </motion.div>
               ))}
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Biological Insights */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mb-8">
+          <Card className="glass border-emerald-500/20 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                <Dna className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-foreground">Biological Insights</h3>
+                <p className="text-sm text-muted-foreground">Marker pathways and clinician-friendly summary</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-2">Observed Pathways</h4>
+                <div className="flex flex-wrap gap-2">
+                  {(biological?.pathways ?? []).map((p: any) => (
+                    <Badge key={p.name} variant="outline" className="text-xs border-emerald-500/30 text-emerald-300">{p.name}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-2">Summary</h4>
+                <p className="text-sm text-muted-foreground">{biological?.summary ?? "No pathway-level signals identified from available clinical features."}</p>
+              </div>
             </div>
           </Card>
         </motion.div>
@@ -362,6 +526,18 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                     <span className="text-sm text-foreground">{rec}</span>
                   </div>
                 ))}
+                <div className="mt-4">
+                  <h5 className="text-sm font-semibold text-foreground mb-2">Suggested next investigations</h5>
+                  <div className="space-y-2">
+                    {nextInvestigations.length > 0 ? nextInvestigations.map((test, i) => (
+                      <div key={test} className="flex items-center gap-3 p-3 rounded-lg bg-muted/10 border border-border">
+                        <span className="text-sm text-foreground">{test}</span>
+                      </div>
+                    )) : (
+                      <div className="text-sm text-muted-foreground">No additional investigations suggested.</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </Card>
           </motion.div>
