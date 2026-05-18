@@ -761,10 +761,6 @@ export interface FullAnalysisResult {
     type?: string;
     characteristics?: string[];
   };
-  differential?: {
-    probabilities?: { [key: string]: number };
-    topDistinguishingFeatures?: string[];
-  };
   biologicalInsights?: {
     pathways?: Array<{ name: string; reason: string }>;
     summary?: string;

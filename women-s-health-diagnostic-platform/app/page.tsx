@@ -10,6 +10,7 @@ import { CTASection } from "@/components/landing/cta-section"
 import { Navigation } from "@/components/landing/navigation"
 import { ParticleBackground } from "@/components/landing/particle-background"
 import { FlyingButterflies } from "@/components/landing/flying-butterflies"
+import { PhenotypeCard } from "@/components/PhenotypeCard"
 
 export default function Home() {
   return (
@@ -25,6 +26,7 @@ export default function Home() {
       <DatasetSection />
       <TechnologySection />
       <CTASection />
+      <PhenotypeCard />
     </main>
   )
 }

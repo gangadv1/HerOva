@@ -91,7 +91,7 @@ const patientSymptomData: SymptomData[] = [
     id: "pelvic",
     name: "Pelvic Region",
     region: "pelvis",
-    description: "Chronic pelvic discomfort reported. May be related to ovarian enlargement or concurrent endometriosis (differential diagnosis).",
+    description: "Chronic pelvic discomfort reported. May be related to ovarian enlargement or concurrent endometriosis.",
     severity: "mild",
     symptoms: ["Dull pelvic ache", "Discomfort during ovulation", "Lower back pain"],
   },
