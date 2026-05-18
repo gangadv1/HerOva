@@ -7,7 +7,7 @@ export default function BodyVisualizationPlaceholder() {
     <div className="w-full flex items-center justify-center p-8">
       <div className="glass rounded-xl p-6 text-center max-w-md">
         <h3 className="text-lg font-bold mb-2">Interactive Body Map</h3>
-        <p className="text-sm text-muted-foreground mb-4">The interactive body visualization is temporarily unavailable. You can still use the form view to enter patient data and run the Quick Screening workflow.</p>
+        <p className="text-sm text-muted-foreground mb-4">The interactive body visualization is temporarily unavailable. You can still use the form view to enter patient data and run the screening workflow.</p>
         <div className="h-48 bg-gradient-to-b from-purple-50 to-cyan-50 rounded-md flex items-center justify-center text-sm text-muted-foreground">Body viewer disabled (placeholder)</div>
       </div>
     </div>

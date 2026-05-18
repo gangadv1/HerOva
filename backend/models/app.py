@@ -508,7 +508,6 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 	factors = _has_risk_signal(patient)
 	confidence = _confidence_metrics(probability, patient, phenotype)
 	recommendations = _recommendations(risk_score, phenotype)
-	differential = _differential_diagnosis(patient, probability, phenotype)
 	# biological insights and suggested next investigations
 	shap_values, top_contributors = _shap_like_values(patient)
 	biological = _biological_insights(patient, top_contributors, phenotype)
@@ -526,7 +525,6 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 		"probability": probability,
 		"modelScore": model_score,
 		"clinicalScore": clinical_score,
-		"differential": differential,
 	}
 
 
@@ -682,64 +680,7 @@ def _clusters(patient: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, A
 	return assigned_summary, clusters
 
 
-def _differential_diagnosis(patient: dict[str, Any], probability: float, phenotype: dict[str, str]) -> dict[str, Any]:
-	"""Simple rule-based differential between PCOS, Endometriosis, and Healthy.
 
-	This is intentionally transparent: it combines the ML `probability` for PCOS
-	with rule-based signals for endometriosis (pelvic pain, dysmenorrhea,
-	infertility) and a baseline healthy remainder. Produces percentages that
-	sum to 100 and a short list of most distinguishing features.
-	"""
-	# Base PCOS propensity from ML model
-	pcos_prop = float(probability)
-
-	# Endometriosis signals (presence of pelvic pain, severe dysmenorrhea, infertility)
-	endo_signal = 0.0
-	if patient.get("pelvicPain"):
-		endo_signal += 0.5
-	if patient.get("dysmenorrhea"):
-		endo_signal += 0.4
-	if patient.get("infertility"):
-		endo_signal += 0.4
-
-	# Normalize endo signal into a probability-like score (cap at 0.95)
-	endo_prop = min(0.95, endo_signal / 1.0)
-
-	# Healthy baseline inversely related to combined disease props
-	combined = pcos_prop + endo_prop
-	if combined >= 0.99:
-		# scale down proportionally to allow small healthy remainder
-		scale = 0.99 / combined
-		pcos_prop *= scale
-		endo_prop *= scale
-
-	healthy_prop = max(0.0, 1.0 - (pcos_prop + endo_prop))
-
-	# Convert to percentages and ensure rounding sums to 100
-	raw = {
-		"PCOS": int(round(pcos_prop * 100)),
-		"Endometriosis": int(round(endo_prop * 100)),
-		"Healthy": int(round(healthy_prop * 100)),
-	}
-	# Fix rounding differences
-	total = sum(raw.values())
-	if total != 100:
-		diff = 100 - total
-		# Adjust the largest value
-		key = max(raw, key=lambda k: raw[k])
-		raw[key] = raw[key] + diff
-
-	# Most influential distinguishing features (explicit list requested)
-	distinguishing = []
-	if patient.get("amh") and patient.get("amh") >= 4:
-		distinguishing.append("elevated AMH")
-	if patient.get("cycleLength") and patient.get("cycleLength") > 35:
-		distinguishing.append("irregular ovulation")
-	if (patient.get("follicleLeft") and patient.get("follicleLeft") >= 12) or (patient.get("follicleRight") and patient.get("follicleRight") >= 12):
-		distinguishing.append("follicle count")
-
-	# Limit list and return
-	return {"probabilities": raw, "topDistinguishingFeatures": distinguishing[:5]}
 
 
 @app.get("/health")

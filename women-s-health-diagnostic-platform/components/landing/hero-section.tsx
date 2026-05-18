@@ -67,11 +67,7 @@ export function HeroSection() {
 
             </Link>
             
-            <Link href="/analysis?mode=quick">
-              <Button size="lg" variant="ghost" className="text-lg px-6 py-4 border-cyan-500/30 text-foreground hover:bg-cyan-500/5">
-                Quick Screening Mode
-              </Button>
-            </Link>
+            {/* Quick Screening removed */}
             <Link href="/body-visualization">
               <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-cyan-500/50 text-foreground hover:bg-cyan-500/10">
                 <Activity className="mr-2 w-5 h-5" />

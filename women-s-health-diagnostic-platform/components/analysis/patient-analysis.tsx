@@ -27,11 +27,7 @@ const steps = [
   { id: "biomarkers", title: "Lab Biomarkers", component: LabBiomarkersForm },
 ]
 
-const quickSteps = [
-  { id: "demographics", title: "Demographics", component: DemographicsForm },
-  { id: "menstrual", title: "Menstrual Health", component: MenstrualHealthForm },
-  { id: "hormonal", title: "Hormonal Symptoms", component: HormonalSymptomsForm },
-]
+// quickSteps removed — Quick Screening mode deprecated
 
 export type PatientData = {
   // Demographics
@@ -127,15 +123,15 @@ const initialPatientData: PatientData = {
 export function PatientAnalysis() {
   const searchParams = useSearchParams()
   const param = (searchParams?.get("mode") as string) || "full"
-  const initialMode = param === "quick" ? "quick" : param === "telehealth" ? "telehealth" : "full"
+  const initialMode = param === "telehealth" ? "telehealth" : "full"
 
-  const [mode, setMode] = useState<"full" | "quick" | "telehealth">(initialMode)
+  const [mode, setMode] = useState<"full" | "telehealth">(initialMode)
   const [currentStep, setCurrentStep] = useState(0)
   const [patientData, setPatientData] = useState<PatientData>(initialPatientData)
   const [showResults, setShowResults] = useState(false)
   const [showBodyView, setShowBodyView] = useState(false)
 
-  const activeSteps = mode === "quick" ? quickSteps : steps
+  const activeSteps = steps
   const progress = ((currentStep + 1) / activeSteps.length) * 100
 
   const handleNext = () => {
@@ -179,16 +175,6 @@ export function PatientAnalysis() {
           
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex items-center gap-2">
-              <Button
-                variant={mode === "quick" ? "secondary" : "outline"}
-                size="sm"
-                onClick={() => setMode(mode === "quick" ? "full" : "quick")}
-                className="border-purple-500/50 text-foreground hover:bg-purple-500/10"
-              >
-                {mode === "quick" ? "Quick Screening: ON" : "Quick Screening: OFF"}
-              </Button>
-              <span className="text-sm text-muted-foreground">No labs required in Quick Mode</span>
-
               <Button
                 variant={mode === "telehealth" ? "secondary" : "outline"}
                 size="sm"

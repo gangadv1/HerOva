@@ -14,7 +14,7 @@ function getEnvVar(keys: string[]): string {
 
 const SUPABASE_URL = getEnvVar(["NEXT_PUBLIC_SUPABASE_URL", "VITE_SUPABASE_URL"]);
 const SUPABASE_ANON_KEY = getEnvVar(["NEXT_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY"]);
-const LOCAL_MODEL_URL = getEnvVar(["LOCAL_MODEL_URL", "REACT_APP_LOCAL_MODEL_URL"]) || "http://localhost:8000";
+const LOCAL_MODEL_URL = getEnvVar(["LOCAL_MODEL_URL", "REACT_APP_LOCAL_MODEL_URL"]) || "http://localhost:8001";
 const LOCAL_SESSION_STORAGE_KEY = "herova.local.sessions.v1";
 
 interface LocalSessionRecord {
@@ -760,10 +760,6 @@ export interface FullAnalysisResult {
     displayName?: string;
     type?: string;
     characteristics?: string[];
-  };
-  differential?: {
-    probabilities?: { [key: string]: number };
-    topDistinguishingFeatures?: string[];
   };
   biologicalInsights?: {
     pathways?: Array<{ name: string; reason: string }>;
