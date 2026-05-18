@@ -79,6 +79,35 @@ export function BodyVisualization({ patientData }: { patientData?: any }) {
               {patientData.bmi ? ` • BMI: ${patientData.bmi}` : ""}
             </div>
           )}
+
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                const report = {
+                  generatedAt: new Date().toISOString(),
+                  selectedRegion: selected,
+                  selectedRegionLabel: selected ? regions.find(r => r.id === selected)?.label : null,
+                  patientData: patientData ?? null,
+                }
+
+                const json = JSON.stringify(report, null, 2)
+                const blob = new Blob([json], { type: "application/json" })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement("a")
+                a.href = url
+                const ts = new Date().toISOString().replace(/[:.]/g, "-")
+                a.download = `herova-report-${ts}.json`
+                document.body.appendChild(a)
+                a.click()
+                a.remove()
+                URL.revokeObjectURL(url)
+              }}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:opacity-95"
+            >
+              Download Report
+            </button>
+          </div>
         </div>
       </div>
     </div>
