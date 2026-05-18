@@ -248,6 +248,9 @@ def _build_patient(row: dict[str, Any]) -> dict[str, float | bool | str]:
 		"totalTestosterone": _to_float(_get_field(row, "Total Testosterone", "Total_Testosterone", "totalTestosterone", "total_testosterone")),
 		"freeTestosterone": _to_float(_get_field(row, "Free Testosterone", "freeTestosterone", "free_testosterone")),
 		"dheas": _to_float(_get_field(row, "DHEAS", "dheas")),
+		"pelvicPain": _to_bool(_get_field(row, "Pelvic pain (Y/N)", "pelvic_pain", "pelvicPain", "dysmenorrhea", "painfulPeriods")),
+		"dysmenorrhea": _to_bool(_get_field(row, "Dysmenorrhea (Y/N)", "dysmenorrhea", "painfulPeriods")),
+		"infertility": _to_bool(_get_field(row, "Infertility (Y/N)", "infertility", "tryingToConceive")),
 		"weightGain": _to_bool(_get_field(row, "Weight gain(Y/N)", "Weight_Gain", "weight_gain", "weightGain")),
 		"hairGrowth": _to_bool(_get_field(row, "hair growth(Y/N)", "Hirsutism", "hirsutism", "hairGrowth")),
 		"skinDarkening": _to_bool(_get_field(row, "Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening", "skinDarkening")),
@@ -452,6 +455,7 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 	factors = _has_risk_signal(patient)
 	confidence = _confidence_metrics(probability, patient, phenotype)
 	recommendations = _recommendations(risk_score, phenotype)
+	differential = _differential_diagnosis(patient, probability, phenotype)
 
 	return {
 		"pcosRiskScore": risk_score,
@@ -464,6 +468,7 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 		"probability": probability,
 		"modelScore": model_score,
 		"clinicalScore": clinical_score,
+		"differential": differential,
 	}
 
 
@@ -520,6 +525,66 @@ def _clusters(patient: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, A
 
 	assigned = next((cluster for cluster in clusters if cluster["patientCount"] > 0), clusters[-1])
 	return assigned, clusters
+
+
+def _differential_diagnosis(patient: dict[str, Any], probability: float, phenotype: dict[str, str]) -> dict[str, Any]:
+	"""Simple rule-based differential between PCOS, Endometriosis, and Healthy.
+
+	This is intentionally transparent: it combines the ML `probability` for PCOS
+	with rule-based signals for endometriosis (pelvic pain, dysmenorrhea,
+	infertility) and a baseline healthy remainder. Produces percentages that
+	sum to 100 and a short list of most distinguishing features.
+	"""
+	# Base PCOS propensity from ML model
+	pcos_prop = float(probability)
+
+	# Endometriosis signals (presence of pelvic pain, severe dysmenorrhea, infertility)
+	endo_signal = 0.0
+	if patient.get("pelvicPain"):
+		endo_signal += 0.5
+	if patient.get("dysmenorrhea"):
+		endo_signal += 0.4
+	if patient.get("infertility"):
+		endo_signal += 0.4
+
+	# Normalize endo signal into a probability-like score (cap at 0.95)
+	endo_prop = min(0.95, endo_signal / 1.0)
+
+	# Healthy baseline inversely related to combined disease props
+	combined = pcos_prop + endo_prop
+	if combined >= 0.99:
+		# scale down proportionally to allow small healthy remainder
+		scale = 0.99 / combined
+		pcos_prop *= scale
+		endo_prop *= scale
+
+	healthy_prop = max(0.0, 1.0 - (pcos_prop + endo_prop))
+
+	# Convert to percentages and ensure rounding sums to 100
+	raw = {
+		"PCOS": int(round(pcos_prop * 100)),
+		"Endometriosis": int(round(endo_prop * 100)),
+		"Healthy": int(round(healthy_prop * 100)),
+	}
+	# Fix rounding differences
+	total = sum(raw.values())
+	if total != 100:
+		diff = 100 - total
+		# Adjust the largest value
+		key = max(raw, key=lambda k: raw[k])
+		raw[key] = raw[key] + diff
+
+	# Most influential distinguishing features (explicit list requested)
+	distinguishing = []
+	if patient.get("amh") and patient.get("amh") >= 4:
+		distinguishing.append("elevated AMH")
+	if patient.get("cycleLength") and patient.get("cycleLength") > 35:
+		distinguishing.append("irregular ovulation")
+	if (patient.get("follicleLeft") and patient.get("follicleLeft") >= 12) or (patient.get("follicleRight") and patient.get("follicleRight") >= 12):
+		distinguishing.append("follicle count")
+
+	# Limit list and return
+	return {"probabilities": raw, "topDistinguishingFeatures": distinguishing[:5]}
 
 
 @app.get("/health")
