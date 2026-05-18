@@ -97,7 +97,22 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
     )
   }
 
-  const { prediction, phenotype, shap, clustering, confidenceMetrics, recommendations } = analysis
+  const prediction = analysis.prediction
+  const phenotype = analysis.phenotype
+  const shap = analysis.shap ?? { values: [], topContributors: [] }
+  const clustering = analysis.clustering ?? {
+    assignedCluster: {
+      id: 0,
+      name: analysis.phenotypeDisplay?.displayName ?? phenotype.name,
+      description: analysis.phenotype.description,
+      characteristics: analysis.phenotypeDisplay?.characteristics ?? [],
+      riskProfile: prediction.riskLevel,
+      metabolicRisk: prediction.riskLevel,
+    },
+    allClusters: [],
+  }
+  const confidenceMetrics = analysis.confidenceMetrics
+  const recommendations = Array.isArray(analysis.recommendations) ? analysis.recommendations : []
 
   const getRiskColor = (level: string) => {
     if (level === "high") return "pink"
@@ -245,16 +260,16 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
               </div>
               <div>
                 <h3 className="font-bold text-foreground">Phenotype Cluster Assignment</h3>
-                <p className="text-sm text-muted-foreground">Patient assigned to {clustering.assignedCluster.name}</p>
+                  <p className="text-sm text-muted-foreground">Patient assigned to {clustering.assignedCluster?.name ?? "Unassigned"}</p>
               </div>
             </div>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/20">
-                  <h4 className="font-semibold text-foreground mb-2">{clustering.assignedCluster.name}</h4>
-                  <p className="text-sm text-muted-foreground mb-3">{clustering.assignedCluster.description}</p>
+                  <h4 className="font-semibold text-foreground mb-2">{clustering.assignedCluster?.name ?? "Unassigned"}</h4>
+                  <p className="text-sm text-muted-foreground mb-3">{clustering.assignedCluster?.description ?? "No cluster information available from the current analysis response."}</p>
                   <div className="flex flex-wrap gap-2">
-                    {clustering.assignedCluster.characteristics.map((c) => (
+                    {(clustering.assignedCluster?.characteristics ?? []).map((c) => (
                       <Badge key={c} variant="outline" className="border-cyan-500/30 text-cyan-300 text-xs">{c}</Badge>
                     ))}
                   </div>
@@ -262,17 +277,17 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                 <div className="p-3 rounded-lg bg-muted/20 border border-border">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Metabolic Risk</span>
-                    <Badge className={clustering.assignedCluster.metabolicRisk === "high" ? "bg-pink-500/20 text-pink-300" : clustering.assignedCluster.metabolicRisk === "moderate" ? "bg-yellow-500/20 text-yellow-300" : "bg-green-500/20 text-green-300"}>
-                      {clustering.assignedCluster.metabolicRisk.toUpperCase()}
+                    <Badge className={(clustering.assignedCluster?.metabolicRisk ?? prediction.riskLevel) === "high" ? "bg-pink-500/20 text-pink-300" : (clustering.assignedCluster?.metabolicRisk ?? prediction.riskLevel) === "moderate" ? "bg-yellow-500/20 text-yellow-300" : "bg-green-500/20 text-green-300"}>
+                      {(clustering.assignedCluster?.metabolicRisk ?? prediction.riskLevel).toUpperCase()}
                     </Badge>
                   </div>
                 </div>
               </div>
               <div className="space-y-2">
                 <h5 className="text-sm font-medium text-foreground mb-3">All Phenotype Clusters</h5>
-                {clustering.allClusters.map((cluster) => (
+                {clustering.allClusters.length > 0 ? clustering.allClusters.map((cluster) => (
                   <div key={cluster.id} className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
-                    cluster.id === clustering.assignedCluster.id ? "bg-cyan-500/10 border-cyan-500/40" : "bg-muted/10 border-border/50"
+                    cluster.id === (clustering.assignedCluster?.id ?? -1) ? "bg-cyan-500/10 border-cyan-500/40" : "bg-muted/10 border-border/50"
                   }`}>
                     <span className="text-sm text-foreground">{cluster.name}</span>
                     <Badge variant="outline" className={`text-xs ${
@@ -281,7 +296,11 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                       {cluster.metabolicRisk}
                     </Badge>
                   </div>
-                ))}
+                )) : (
+                  <div className="p-3 rounded-lg bg-muted/10 border border-border/50 text-sm text-muted-foreground">
+                    Cluster details are unavailable in the current response.
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -300,7 +319,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
               </div>
             </div>
             <div className="space-y-4">
-              {shap.values.map((feature, index) => (
+              {shap.values.length > 0 ? shap.values.map((feature, index) => (
                 <motion.div key={feature.name} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 + index * 0.05 }} className="flex items-center gap-4">
                   <span className="w-36 text-sm text-muted-foreground shrink-0">{feature.name}</span>
                   <div className="flex-1 flex items-center gap-2">
@@ -314,7 +333,11 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                     </span>
                   </div>
                 </motion.div>
-              ))}
+              )) : (
+                <div className="p-3 rounded-lg bg-muted/10 border border-border/50 text-sm text-muted-foreground">
+                  No SHAP feature contributions were returned by the backend.
+                </div>
+              )}
             </div>
           </Card>
         </motion.div>
@@ -354,14 +377,19 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                 <h3 className="font-bold text-foreground">Clinical Recommendations</h3>
               </div>
               <div className="space-y-3">
-                {recommendations.map((rec, index) => (
+                {recommendations.length > 0 ? recommendations.map((rec, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
                     <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
                       <span className="text-xs text-cyan-300">{index + 1}</span>
                     </div>
                     <span className="text-sm text-foreground">{rec}</span>
                   </div>
-                ))}
+                )) : (
+                  <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                    <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
+                    <span className="text-sm text-foreground">No additional recommendations returned.</span>
+                  </div>
+                )}
               </div>
             </Card>
           </motion.div>
