@@ -765,6 +765,10 @@ export interface FullAnalysisResult {
     probabilities?: { [key: string]: number };
     topDistinguishingFeatures?: string[];
   };
+  biologicalInsights?: {
+    pathways?: Array<{ name: string; reason: string }>;
+    summary?: string;
+  };
   rotterdamEvaluation: RotterdamEvaluation;
   shap: {
     values: Array<{

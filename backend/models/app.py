@@ -508,6 +508,71 @@ def _shap_like_values(patient: dict[str, Any]) -> tuple[list[dict[str, Any]], li
 	return shap_values, top_contributors
 
 
+def _biological_insights(patient: dict[str, Any], top_contributors: list[dict[str, Any]], phenotype: dict[str, str]) -> dict[str, Any]:
+	"""Generate lightweight biological insights linking pathways to clinical features.
+
+	This is intentionally simple and transparent: it maps clinical and SHAP-like
+	contributors to pathway-level signals and produces a clinician-friendly
+	summary sentence that does NOT claim extensive bioinformatics work.
+	"""
+	pathways = {
+		"inflammatory": False,
+		"insulin_signaling": False,
+		"androgen_signaling": False,
+		"ovarian_dysfunction": False,
+	}
+
+	# Look for clinical signals
+	if patient.get("skinDarkening") or patient.get("rbs", 0) >= 110 or patient.get("bmi", 0) >= 25:
+		pathways["inflammatory"] = True
+		pathways["insulin_signaling"] = True
+
+	if patient.get("homaIr", 0) > 1.5 or patient.get("insulinLevel", 0) > 12:
+		pathways["insulin_signaling"] = True
+
+	if patient.get("totalTestosterone", 0) > 40 or patient.get("freeTestosterone", 0) > 2.5 or patient.get("dheas", 0) > 300:
+		pathways["androgen_signaling"] = True
+
+	if patient.get("amh", 0) >= 4 or patient.get("follicleLeft", 0) >= 12 or patient.get("follicleRight", 0) >= 12:
+		pathways["ovarian_dysfunction"] = True
+
+	# Use SHAP-like top contributors to boost confidence for matching pathways
+	for contrib in top_contributors:
+		name = contrib.get("feature", "").lower()
+		if "cycle" in name or "follicle" in name or "amh" in name:
+			pathways["ovarian_dysfunction"] = True
+		if "bmi" in name or "glucose" in name or "homa" in name:
+			pathways["insulin_signaling"] = True
+		if "skin" in name or "acne" in name or "hirsutism" in name:
+			pathways["inflammatory"] = True
+		if "testosterone" in name or "androgen" in name or "dheas" in name:
+			pathways["androgen_signaling"] = True
+
+	# Build clinician-friendly summary (per requirement phrasing)
+	summary_parts = []
+	if pathways["inflammatory"] and pathways["insulin_signaling"]:
+		summary = "Observed inflammatory and insulin-signaling pathway dysregulation aligns with the patient's predicted phenotype."
+	elif pathways["inflammatory"]:
+		summary = "Observed inflammatory pathway signals align with the patient's predicted phenotype."
+	elif pathways["insulin_signaling"]:
+		summary = "Observed insulin-signaling pathway signals align with the patient's predicted phenotype."
+	else:
+		summary = "No strong pathway-level signals identified from available clinical features."
+
+	# Prepare pathway list with short descriptions
+	pathway_list = []
+	if pathways["inflammatory"]:
+		pathway_list.append({"name": "Inflammatory pathways", "reason": "Clinical inflammation markers, skin changes, or metabolic signals"})
+	if pathways["insulin_signaling"]:
+		pathway_list.append({"name": "Insulin signaling", "reason": "HOMA-IR, elevated glucose, or BMI-associated signals"})
+	if pathways["androgen_signaling"]:
+		pathway_list.append({"name": "Androgen signaling", "reason": "Elevated testosterone/DHEAS or clinical hyperandrogenism"})
+	if pathways["ovarian_dysfunction"]:
+		pathway_list.append({"name": "Ovarian dysfunction markers", "reason": "Elevated AMH, high follicle counts, or cycle irregularity"})
+
+	return {"pathways": pathway_list, "summary": summary}
+
+
 def _clusters(patient: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 	has_oligo = patient["cycleLength"] > 35 or patient["cycleValue"] >= 1
 	has_ha = patient["hairGrowth"] or patient["pimples"] or patient["hairLoss"] or patient["skinDarkening"]
@@ -648,12 +713,8 @@ def analyze() -> tuple[Any, int]:
 	analysis = _analyze_single(payload)
 	shap_values, top_contributors = _shap_like_values(analysis["patient"])
 	assigned_cluster, all_clusters = _clusters(analysis["patient"])
-	# Provide phenotype display details based on clustering mapping
-	phenotype_display = {
-		"displayName": assigned_cluster.get("phenotypeDisplay"),
-		"type": assigned_cluster.get("mappedType"),
-		"characteristics": assigned_cluster.get("characteristics", []),
-	}
+	# Biological insights
+	biological = _biological_insights(analysis["patient"], top_contributors, analysis["phenotype"]) 
 	return jsonify(
 		{
 			"success": True,
@@ -663,7 +724,12 @@ def analyze() -> tuple[Any, int]:
 				"contributingFactors": analysis["contributingFactors"],
 			},
 			"phenotype": analysis["phenotype"],
-			"phenotypeDisplay": phenotype_display,
+			"phenotypeDisplay": {
+				"displayName": assigned_cluster.get("phenotypeDisplay"),
+				"type": assigned_cluster.get("mappedType"),
+				"characteristics": assigned_cluster.get("characteristics", []),
+			},
+			"biologicalInsights": biological,
 			"shap": {"values": shap_values, "topContributors": top_contributors},
 			"clustering": {
 				"assignedCluster": {

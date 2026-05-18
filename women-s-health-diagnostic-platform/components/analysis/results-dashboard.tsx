@@ -100,6 +100,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
   const { prediction, phenotype, shap, clustering, confidenceMetrics, recommendations } = analysis
   const phenotypeDisplay = (analysis as any).phenotypeDisplay
   const differential = (analysis as any).differential
+  const biological = (analysis as any).biologicalInsights
 
   const getRiskColor = (level: string) => {
     if (level === "high") return "pink"
@@ -357,6 +358,35 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                   </div>
                 </motion.div>
               ))}
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Biological Insights */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mb-8">
+          <Card className="glass border-emerald-500/20 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                <Dna className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-foreground">Biological Insights</h3>
+                <p className="text-sm text-muted-foreground">Marker pathways and clinician-friendly summary</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-2">Observed Pathways</h4>
+                <div className="flex flex-wrap gap-2">
+                  {(biological?.pathways ?? []).map((p: any) => (
+                    <Badge key={p.name} variant="outline" className="text-xs border-emerald-500/30 text-emerald-300">{p.name}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 className="text-sm font-medium text-foreground mb-2">Summary</h4>
+                <p className="text-sm text-muted-foreground">{biological?.summary ?? "No pathway-level signals identified from available clinical features."}</p>
+              </div>
             </div>
           </Card>
         </motion.div>
