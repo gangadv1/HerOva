@@ -198,6 +198,22 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </p>
         </motion.div>
 
+        {/* Prediction + Confidence */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+          <Card className="glass p-4 border-border/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-muted-foreground">Prediction</div>
+                <div className="text-lg font-bold">Type {phenotype.type} — {phenotype.name}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-muted-foreground">Confidence</div>
+                <div className="text-xl font-bold text-foreground">{Math.round((confidenceMetrics?.pcosClassification ?? 0) * 100) / 100}%</div>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
         {/* Main Results Grid */}
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           {/* PCOS Risk Score */}
@@ -381,6 +397,26 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                     </div>
                   ))}
                 </div>
+              </div>
+            </div>
+            <div className="mt-6">
+              <h4 className="text-sm font-medium text-foreground mb-3">Why alternative conditions were deprioritized</h4>
+              <div className="space-y-2">
+                {differential?.explanations ? Object.entries(differential.explanations).map(([cond, expl]) => (
+                  <div key={cond} className="p-3 rounded-lg bg-muted/10 border border-border">
+                    <div className="flex items-center justify-between mb-2">
+                      <strong className="text-sm">{cond}</strong>
+                      <span className="text-sm text-muted-foreground">{differential?.probabilities?.[cond] ?? "--"}%</span>
+                    </div>
+                    <ul className="list-disc list-inside text-sm text-muted-foreground">
+                      {(Array.isArray(expl) ? expl : [String(expl)]).map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )) : (
+                  <div className="text-sm text-muted-foreground">No alternative-condition explanations available.</div>
+                )}
               </div>
             </div>
           </Card>

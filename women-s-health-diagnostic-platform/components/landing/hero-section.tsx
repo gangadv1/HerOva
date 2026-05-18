@@ -24,7 +24,7 @@ export function HeroSection() {
             <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-sm text-purple-300 border border-purple-500/30">
               <Sparkles className="w-4 h-4" />
               <Logo size="sm" />
-              AI-Powered Precision Diagnostics
+              Rethinking endocrine diagnostics through phenotype-aware AI
             </span>
           </motion.div>
 
