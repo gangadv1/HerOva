@@ -2,7 +2,8 @@
 
 import React from "react"
 
-export default function BodyVisualizationPlaceholder() {
+// Provide both a named and default export so consumers can import either
+export function BodyVisualization({ patientData }: { patientData?: any }) {
   return (
     <div className="w-full flex items-center justify-center p-8">
       <div className="glass rounded-xl p-6 text-center max-w-md">
@@ -13,3 +14,5 @@ export default function BodyVisualizationPlaceholder() {
     </div>
   )
 }
+
+export default BodyVisualization
