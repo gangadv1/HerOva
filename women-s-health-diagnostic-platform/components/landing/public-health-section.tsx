@@ -1,12 +1,10 @@
 "use client"
 
-import SymptomsEducation from "@/components/education/symptoms-education"
-
 export function PublicHealthSection() {
   return (
     <section className="container mx-auto px-4 py-8 sm:px-6 sm:py-12">
       <div className="max-w-4xl mx-auto text-center mb-6">
-        <h2 className="text-xl sm:text-2xl font-bold">Early identification of underserved women at risk for endocrine disorders</h2>
+        <h2 className="text-xl sm:text-2xl font-bold">Early identification of at-risk women</h2>
         <p className="text-sm text-muted-foreground mt-2">Accessible, scalable triage for telehealth, low-resource clinics, and community screening.</p>
       </div>
 
@@ -24,19 +22,16 @@ export function PublicHealthSection() {
 
         <div className="glass rounded-2xl p-4 sm:p-6 border border-border/30">
           <h3 className="font-semibold">Long-Term Health Outlook</h3>
-          <p className="text-sm text-muted-foreground mt-2">Potential associated risks: insulin resistance, fertility complications, metabolic syndrome, cardiovascular risk, and mental health impacts.</p>
-          <p className="text-sm text-muted-foreground mt-3">Our platform provides guidance on long-term risk reduction and suggested follow-up pathways.</p>
+          <p className="text-sm text-muted-foreground mt-2">Potential associated risks: insulin resistance, metabolic syndrome, fertility complications, and cardiovascular risk.</p>
         </div>
 
         <div className="glass rounded-2xl p-4 sm:p-6 border border-border/30">
-          <h3 className="font-semibold">Population Impact</h3>
-          <p className="text-sm text-muted-foreground mt-2">Support screening campaigns (schools, clinics) to identify high-risk patients and prioritize interventions at scale.</p>
+          <h3 className="font-semibold">Community Impact</h3>
+          <p className="text-sm text-muted-foreground mt-2">Designed to guide follow-up testing and referrals where needed, with simple actionable recommendations for non-specialist settings.</p>
         </div>
-      </div>
-
-      <div className="mb-6">
-        <SymptomsEducation />
       </div>
     </section>
   )
 }
+
+export default PublicHealthSection

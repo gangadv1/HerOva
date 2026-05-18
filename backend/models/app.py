@@ -9,7 +9,6 @@ import joblib
 import numpy as np
 from flask import Flask, jsonify, request
 from flask_cors import CORS
-import clinical_rules
 
 
 app = Flask(__name__)
@@ -248,9 +247,6 @@ def _build_patient(row: dict[str, Any]) -> dict[str, float | bool | str]:
 		"totalTestosterone": _to_float(_get_field(row, "Total Testosterone", "Total_Testosterone", "totalTestosterone", "total_testosterone")),
 		"freeTestosterone": _to_float(_get_field(row, "Free Testosterone", "freeTestosterone", "free_testosterone")),
 		"dheas": _to_float(_get_field(row, "DHEAS", "dheas")),
-		"pelvicPain": _to_bool(_get_field(row, "Pelvic pain (Y/N)", "pelvic_pain", "pelvicPain", "dysmenorrhea", "painfulPeriods")),
-		"dysmenorrhea": _to_bool(_get_field(row, "Dysmenorrhea (Y/N)", "dysmenorrhea", "painfulPeriods")),
-		"infertility": _to_bool(_get_field(row, "Infertility (Y/N)", "infertility", "tryingToConceive")),
 		"weightGain": _to_bool(_get_field(row, "Weight gain(Y/N)", "Weight_Gain", "weight_gain", "weightGain")),
 		"hairGrowth": _to_bool(_get_field(row, "hair growth(Y/N)", "Hirsutism", "hirsutism", "hairGrowth")),
 		"skinDarkening": _to_bool(_get_field(row, "Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening", "skinDarkening")),
@@ -397,16 +393,20 @@ def _clinical_risk_score(patient: dict[str, Any]) -> int:
 	return int(round(_clamp(score)))
 
 
-def _phenotype(patient: dict[str, Any], model_probability: float | None = None) -> dict[str, str]:
-	"""Wrapper that delegates to `clinical_rules.evaluate_rotterdam`.
+def _phenotype(patient: dict[str, Any]) -> dict[str, str]:
+	has_oligo = patient["cycleLength"] > 35 or patient["cycleValue"] >= 1
+	has_ha = patient["hairGrowth"] or patient["pimples"] or patient["hairLoss"] or patient["skinDarkening"]
+	has_pcom = patient["follicleLeft"] >= 12 or patient["follicleRight"] >= 12
 
-	Returns a compact dict compatible with the rest of this module
-	(keys: `type`, `name`, `description`). The rules engine produces
-	additional detail which is preserved elsewhere if needed.
-	"""
-	result = clinical_rules.evaluate_rotterdam(patient, model_probability)
-	# Keep compatibility with existing callers expecting a small dict
-	return {"type": result.get("type", "N/A"), "name": result.get("name", ""), "description": result.get("description", "")}
+	if has_oligo and has_ha and has_pcom:
+		return {"type": "A", "name": "Frank/Classic PCOS", "description": "All three Rotterdam criteria present - most severe phenotype with highest metabolic risk"}
+	if has_oligo and has_ha:
+		return {"type": "B", "name": "Non-PCO PCOS", "description": "Oligomenorrhea and hyperandrogenism without polycystic morphology"}
+	if has_ha and has_pcom:
+		return {"type": "C", "name": "Ovulatory PCOS", "description": "Hyperandrogenism and PCOM with regular cycles - often milder metabolic profile"}
+	if has_oligo and has_pcom:
+		return {"type": "D", "name": "Non-Hyperandrogenic PCOS", "description": "Oligomenorrhea and PCOM without hyperandrogenism - mildest phenotype"}
+	return {"type": "N/A", "name": "Uncertain", "description": "Does not meet Rotterdam criteria for PCOS diagnosis"}
 
 
 def _confidence_metrics(probability: float, patient: dict[str, Any], phenotype: dict[str, str]) -> dict[str, int]:
@@ -444,75 +444,17 @@ def _recommendations(risk_score: float, phenotype: dict[str, str]) -> list[str]:
 	]
 
 
-def _next_investigations(patient: dict[str, Any], phenotype: dict[str, str], biological: dict[str, Any]) -> list[str]:
-	"""Return a prioritized list of suggested next investigations tailored to the patient.
-
-	The list is conservative and clinician-facing: it suggests commonly ordered tests
-	to clarify metabolic, endocrine, and reproductive status that align with the
-	predicted phenotype and biological pathway signals.
-	"""
-	suggestions: list[str] = []
-
-	# Metabolic / insulin-resistance focused
-	if biological.get("pathways"):
-		names = [p.get("name", "").lower() for p in biological.get("pathways", [])]
-	else:
-		names = []
-
-	if "insulin" in " ".join(names) or patient.get("homaIr", 0) >= 1.5 or patient.get("insulinLevel", 0) >= 12:
-		suggestions.extend(["Fasting insulin", "Oral glucose tolerance test (OGTT)", "HOMA-IR calculation", "HbA1c"])
-
-	# Reproductive / ovarian function
-	if patient.get("amh", 0) >= 2 or patient.get("follicleLeft", 0) >= 10 or patient.get("follicleRight", 0) >= 10:
-		suggestions.extend(["Pelvic ultrasound (transvaginal preferred)", "AMH repeat/confirmation", "Pelvic ultrasound with follicle count documentation"]) 
-
-	# Androgen workup
-	if "androgen" in " ".join(names) or patient.get("totalTestosterone", 0) > 40 or patient.get("freeTestosterone", 0) > 2.5:
-		suggestions.extend(["Testosterone panel (total + free)", "DHEAS level", "17-OH progesterone as appropriate"])
-
-	# Endometriosis / pelvic pain signals
-	if patient.get("pelvicPain") or patient.get("dysmenorrhea"):
-		suggestions.extend(["Transvaginal pelvic ultrasound to assess endometriosis-related findings", "Consider referral for diagnostic laparoscopy if clinically indicated", "Pain and symptom-focused assessment by gynecology"]) 
-
-	# General metabolic and cardiovascular screening
-	if patient.get("bmi", 0) >= 25 or patient.get("rbs", 0) >= 100:
-		suggestions.extend(["Fasting lipid profile", "Liver function tests (ALT/AST)", "Blood pressure monitoring"])
-
-	# Specialist referral if phenotype severe or high risk
-	if phenotype.get("type") in {"A", "B"} or (patient.get("bmi", 0) >= 30 and patient.get("homaIr", 0) > 2):
-		suggestions.append("Referral to reproductive endocrinology / endocrinologist")
-
-	# Deduplicate while preserving order
-	seen = set()
-	deduped = []
-	for s in suggestions:
-		if s not in seen:
-			deduped.append(s)
-			seen.add(s)
-
-	# If nothing suggested, provide a minimal sensible panel
-	if not deduped:
-		deduped = ["Fasting glucose / HbA1c", "Basic hormonal panel (TSH, prolactin)", "Routine pelvic ultrasound if symptoms"]
-
-	return deduped
-
-
 def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 	vector, patient = _build_feature_vector(row)
 	probability = _predict_probability(vector)
 	model_score = int(round(probability * 100))
 	clinical_score = _clinical_risk_score(patient)
 	risk_score = int(round(_clamp((model_score * 0.3) + (clinical_score * 0.7))))
-	phenotype = _phenotype(patient, probability)
+	phenotype = _phenotype(patient)
 	risk_level = "high" if risk_score >= 70 else "moderate" if risk_score >= 40 else "low"
 	factors = _has_risk_signal(patient)
 	confidence = _confidence_metrics(probability, patient, phenotype)
 	recommendations = _recommendations(risk_score, phenotype)
-	differential = _differential_diagnosis(patient, probability, phenotype)
-	# biological insights and suggested next investigations
-	shap_values, top_contributors = _shap_like_values(patient)
-	biological = _biological_insights(patient, top_contributors, phenotype)
-	next_investigations = _next_investigations(patient, phenotype, biological)
 
 	return {
 		"pcosRiskScore": risk_score,
@@ -521,12 +463,10 @@ def _analyze_single(row: dict[str, Any]) -> dict[str, Any]:
 		"contributingFactors": factors,
 		"confidenceMetrics": confidence,
 		"recommendations": recommendations,
-		"nextInvestigations": next_investigations,
 		"patient": patient,
 		"probability": probability,
 		"modelScore": model_score,
 		"clinicalScore": clinical_score,
-		"differential": differential,
 	}
 
 
@@ -566,71 +506,6 @@ def _shap_like_values(patient: dict[str, Any]) -> tuple[list[dict[str, Any]], li
 	return shap_values, top_contributors
 
 
-def _biological_insights(patient: dict[str, Any], top_contributors: list[dict[str, Any]], phenotype: dict[str, str]) -> dict[str, Any]:
-	"""Generate lightweight biological insights linking pathways to clinical features.
-
-	This is intentionally simple and transparent: it maps clinical and SHAP-like
-	contributors to pathway-level signals and produces a clinician-friendly
-	summary sentence that does NOT claim extensive bioinformatics work.
-	"""
-	pathways = {
-		"inflammatory": False,
-		"insulin_signaling": False,
-		"androgen_signaling": False,
-		"ovarian_dysfunction": False,
-	}
-
-	# Look for clinical signals
-	if patient.get("skinDarkening") or patient.get("rbs", 0) >= 110 or patient.get("bmi", 0) >= 25:
-		pathways["inflammatory"] = True
-		pathways["insulin_signaling"] = True
-
-	if patient.get("homaIr", 0) > 1.5 or patient.get("insulinLevel", 0) > 12:
-		pathways["insulin_signaling"] = True
-
-	if patient.get("totalTestosterone", 0) > 40 or patient.get("freeTestosterone", 0) > 2.5 or patient.get("dheas", 0) > 300:
-		pathways["androgen_signaling"] = True
-
-	if patient.get("amh", 0) >= 4 or patient.get("follicleLeft", 0) >= 12 or patient.get("follicleRight", 0) >= 12:
-		pathways["ovarian_dysfunction"] = True
-
-	# Use SHAP-like top contributors to boost confidence for matching pathways
-	for contrib in top_contributors:
-		name = contrib.get("feature", "").lower()
-		if "cycle" in name or "follicle" in name or "amh" in name:
-			pathways["ovarian_dysfunction"] = True
-		if "bmi" in name or "glucose" in name or "homa" in name:
-			pathways["insulin_signaling"] = True
-		if "skin" in name or "acne" in name or "hirsutism" in name:
-			pathways["inflammatory"] = True
-		if "testosterone" in name or "androgen" in name or "dheas" in name:
-			pathways["androgen_signaling"] = True
-
-	# Build clinician-friendly summary (per requirement phrasing)
-	summary_parts = []
-	if pathways["inflammatory"] and pathways["insulin_signaling"]:
-		summary = "Observed inflammatory and insulin-signaling pathway dysregulation aligns with the patient's predicted phenotype."
-	elif pathways["inflammatory"]:
-		summary = "Observed inflammatory pathway signals align with the patient's predicted phenotype."
-	elif pathways["insulin_signaling"]:
-		summary = "Observed insulin-signaling pathway signals align with the patient's predicted phenotype."
-	else:
-		summary = "No strong pathway-level signals identified from available clinical features."
-
-	# Prepare pathway list with short descriptions
-	pathway_list = []
-	if pathways["inflammatory"]:
-		pathway_list.append({"name": "Inflammatory pathways", "reason": "Clinical inflammation markers, skin changes, or metabolic signals"})
-	if pathways["insulin_signaling"]:
-		pathway_list.append({"name": "Insulin signaling", "reason": "HOMA-IR, elevated glucose, or BMI-associated signals"})
-	if pathways["androgen_signaling"]:
-		pathway_list.append({"name": "Androgen signaling", "reason": "Elevated testosterone/DHEAS or clinical hyperandrogenism"})
-	if pathways["ovarian_dysfunction"]:
-		pathway_list.append({"name": "Ovarian dysfunction markers", "reason": "Elevated AMH, high follicle counts, or cycle irregularity"})
-
-	return {"pathways": pathway_list, "summary": summary}
-
-
 def _clusters(patient: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 	has_oligo = patient["cycleLength"] > 35 or patient["cycleValue"] >= 1
 	has_ha = patient["hairGrowth"] or patient["pimples"] or patient["hairLoss"] or patient["skinDarkening"]
@@ -646,100 +521,8 @@ def _clusters(patient: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, A
 		{"clusterId": 4, "clusterName": "Non-PCOS Control", "description": "Does not meet Rotterdam criteria.", "patientCount": 1 if not has_oligo and not has_ha and not has_pcom else 0, "characteristics": ["Regular cycles", "Normal androgens", "Normal ovarian morphology"], "riskProfile": "No PCOS diagnosis indicated", "metabolicRisk": "low"},
 	]
 
-	# Map cluster IDs to higher-level interpretations and phenotype types
-	id_to_interpretation = {
-		0: {"interpretation": "insulin resistant", "mappedType": "Type A", "display": "Type A — Classic hyperandrogenic PCOS", "characteristics": ["elevated AMH", "irregular ovulation", "insulin resistance", "inflammatory profile"]},
-		1: {"interpretation": "hyperandrogenic", "mappedType": "Type B", "display": "Type B — Hyperandrogenic PCOS", "characteristics": ["elevated testosterone", "hirsutism", "irregular cycles"]},
-		2: {"interpretation": "inflammatory", "mappedType": "Type C", "display": "Type C — Inflammatory / Ovulatory PCOS", "characteristics": ["inflammatory markers", "pelvic pain signals", "PCOM"]},
-		3: {"interpretation": "lean PCOS", "mappedType": "Type D", "display": "Type D — Lean / Normo-androgenic PCOS", "characteristics": ["normal BMI", "irregular cycles", "PCOM"]},
-		4: {"interpretation": "control", "mappedType": "N/A", "display": "Non-PCOS Control", "characteristics": []},
-	}
-
-	# Attach interpretation info to each cluster entry
-	for c in clusters:
-		meta = id_to_interpretation.get(c["clusterId"], {})
-		c["interpretation"] = meta.get("interpretation")
-		c["mappedType"] = meta.get("mappedType")
-		c["phenotypeDisplay"] = meta.get("display")
-		# Merge characteristic lists (unique)
-		merged_chars = list(dict.fromkeys((c.get("characteristics", []) or []) + (meta.get("characteristics", []) or [])))
-		c["characteristics"] = merged_chars
-
 	assigned = next((cluster for cluster in clusters if cluster["patientCount"] > 0), clusters[-1])
-
-	# Ensure the assigned cluster exposes the phenotype mapping succinctly
-	assigned_summary = {
-		"clusterId": assigned["clusterId"],
-		"clusterName": assigned["clusterName"],
-		"interpretation": assigned.get("interpretation"),
-		"mappedType": assigned.get("mappedType"),
-		"phenotypeDisplay": assigned.get("phenotypeDisplay"),
-		"characteristics": assigned.get("characteristics", []),
-		"riskProfile": assigned.get("riskProfile"),
-		"metabolicRisk": assigned.get("metabolicRisk"),
-	}
-
-	return assigned_summary, clusters
-
-
-def _differential_diagnosis(patient: dict[str, Any], probability: float, phenotype: dict[str, str]) -> dict[str, Any]:
-	"""Simple rule-based differential between PCOS, Endometriosis, and Healthy.
-
-	This is intentionally transparent: it combines the ML `probability` for PCOS
-	with rule-based signals for endometriosis (pelvic pain, dysmenorrhea,
-	infertility) and a baseline healthy remainder. Produces percentages that
-	sum to 100 and a short list of most distinguishing features.
-	"""
-	# Base PCOS propensity from ML model
-	pcos_prop = float(probability)
-
-	# Endometriosis signals (presence of pelvic pain, severe dysmenorrhea, infertility)
-	endo_signal = 0.0
-	if patient.get("pelvicPain"):
-		endo_signal += 0.5
-	if patient.get("dysmenorrhea"):
-		endo_signal += 0.4
-	if patient.get("infertility"):
-		endo_signal += 0.4
-
-	# Normalize endo signal into a probability-like score (cap at 0.95)
-	endo_prop = min(0.95, endo_signal / 1.0)
-
-	# Healthy baseline inversely related to combined disease props
-	combined = pcos_prop + endo_prop
-	if combined >= 0.99:
-		# scale down proportionally to allow small healthy remainder
-		scale = 0.99 / combined
-		pcos_prop *= scale
-		endo_prop *= scale
-
-	healthy_prop = max(0.0, 1.0 - (pcos_prop + endo_prop))
-
-	# Convert to percentages and ensure rounding sums to 100
-	raw = {
-		"PCOS": int(round(pcos_prop * 100)),
-		"Endometriosis": int(round(endo_prop * 100)),
-		"Healthy": int(round(healthy_prop * 100)),
-	}
-	# Fix rounding differences
-	total = sum(raw.values())
-	if total != 100:
-		diff = 100 - total
-		# Adjust the largest value
-		key = max(raw, key=lambda k: raw[k])
-		raw[key] = raw[key] + diff
-
-	# Most influential distinguishing features (explicit list requested)
-	distinguishing = []
-	if patient.get("amh") and patient.get("amh") >= 4:
-		distinguishing.append("elevated AMH")
-	if patient.get("cycleLength") and patient.get("cycleLength") > 35:
-		distinguishing.append("irregular ovulation")
-	if (patient.get("follicleLeft") and patient.get("follicleLeft") >= 12) or (patient.get("follicleRight") and patient.get("follicleRight") >= 12):
-		distinguishing.append("follicle count")
-
-	# Limit list and return
-	return {"probabilities": raw, "topDistinguishingFeatures": distinguishing[:5]}
+	return assigned, clusters
 
 
 @app.get("/health")
@@ -771,8 +554,6 @@ def analyze() -> tuple[Any, int]:
 	analysis = _analyze_single(payload)
 	shap_values, top_contributors = _shap_like_values(analysis["patient"])
 	assigned_cluster, all_clusters = _clusters(analysis["patient"])
-	# Biological insights
-	biological = _biological_insights(analysis["patient"], top_contributors, analysis["phenotype"]) 
 	return jsonify(
 		{
 			"success": True,
@@ -782,12 +563,6 @@ def analyze() -> tuple[Any, int]:
 				"contributingFactors": analysis["contributingFactors"],
 			},
 			"phenotype": analysis["phenotype"],
-			"phenotypeDisplay": {
-				"displayName": assigned_cluster.get("phenotypeDisplay"),
-				"type": assigned_cluster.get("mappedType"),
-				"characteristics": assigned_cluster.get("characteristics", []),
-			},
-			"biologicalInsights": biological,
 			"shap": {"values": shap_values, "topContributors": top_contributors},
 			"clustering": {
 				"assignedCluster": {

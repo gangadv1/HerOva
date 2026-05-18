@@ -3,7 +3,6 @@ import { Inter, Space_Grotesk } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
-import ClearOnLoad from '@/components/clear-on-load'
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -16,8 +15,8 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: 'HerOva | Rethinking Endocrine Diagnostics',
-  description: 'Rethinking endocrine diagnostics through phenotype-aware explainable AI — integrated biological insights, heterogeneity-aware reasoning, and telehealth-ready workflows.',
+  title: 'HerOva | AI-Powered Women\'s Health Diagnostics',
+  description: 'Precision diagnostics for PCOS and endometriosis using explainable AI. Early detection, personalized insights, and better outcomes for women\'s health.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -46,7 +45,6 @@ export default function RootLayout({
   return (
     <html lang="en" className="bg-background">
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans antialiased`}>
-        <ClearOnLoad />
         {children}
         <Toaster />
         {process.env.NODE_ENV === 'production' && <Analytics />}

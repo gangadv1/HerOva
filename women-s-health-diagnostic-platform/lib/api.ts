@@ -538,27 +538,6 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
   };
 }
 
-export interface RotterdamSubcriterion {
-  name: string;
-  met: boolean;
-  detail: string;
-}
-
-export interface RotterdamCriterionResult {
-  met: boolean;
-  reasoning: string;
-  subcriteria: RotterdamSubcriterion[];
-}
-
-export interface RotterdamEvaluation {
-  hyperandrogenism: RotterdamCriterionResult;
-  ovulatoryDysfunction: RotterdamCriterionResult;
-  polycysticOvaries: RotterdamCriterionResult;
-  criteriaMetCount: number;
-  diagnosisMet: boolean;
-  exclusionNotes: string[];
-}
-
 export interface PredictionResult {
   success: boolean;
   pcosRiskScore: number;
@@ -567,9 +546,7 @@ export interface PredictionResult {
     type: string;
     name: string;
     description: string;
-    clinicalReasoning: string;
   };
-  rotterdamEvaluation: RotterdamEvaluation;
   contributingFactors: string[];
   confidenceMetrics: {
     pcosClassification: number;
@@ -659,91 +636,6 @@ export interface CSVUploadResult {
   timestamp: string;
 }
 
-export interface ExplainResult {
-  success: boolean;
-  shapValues: Array<{
-    name: string;
-    value: number;
-    impact: string;
-    direction: string;
-    explanation: string;
-  }>;
-  topContributors: Array<{
-    feature: string;
-    contribution: number;
-    impact: string;
-    direction: string;
-    explanation: string;
-  }>;
-  clinicalDetails: Array<{
-    feature: string;
-    clinicalContext: string;
-    referenceRange: string;
-    patientValue: string;
-    rotterdamLink: string;
-  }>;
-  rotterdamEvaluation: RotterdamEvaluation;
-  summary: {
-    totalPositiveContribution: number;
-    totalNegativeContribution: number;
-    totalNeutralContribution: number;
-    topFeature: string;
-    topContribution: number;
-    rotterdamCriteriaMet: number;
-    rotterdamDiagnosis: boolean;
-  };
-  explanation: string;
-  timestamp: string;
-}
-
-export interface PatientSummaryResult {
-  success: boolean;
-  patientSummary: {
-    demographics: { age: number; bmi: number; weight: number; height: number };
-    riskAssessment: {
-      pcosRiskScore: number;
-      riskLevel: string;
-      contributingFactors: string[];
-      confidenceMetrics: { pcosClassification: number; phenotypeMatch: number; dataQuality: number };
-    };
-    diagnosis: {
-      rotterdamEvaluation: RotterdamEvaluation;
-      phenotype: { type: string; name: string; description: string; clinicalReasoning: string };
-      pcosDiagnosed: boolean;
-    };
-    metabolicProfile: {
-      bmi: { value: number; category: string };
-      insulinResistance: { present: boolean; homaIr: number; fastingGlucose: number; insulinLevel: number };
-      bloodPressure: { systolic: number; diastolic: number; hypertensive: boolean };
-      waistCircumference: { value: number; elevated: boolean };
-      riskFactors: string[];
-      metabolicRiskLevel: string;
-    };
-    hormonalProfile: {
-      gonadotropins: { lh: number; fsh: number; ratio: number; abnormal: boolean };
-      androgens: { totalTestosterone: number; freeTestosterone: number; dheas: number; elevated: boolean };
-      ovarianReserve: { amh: number; elevated: boolean };
-      other: { prolactin: number; tsh: number };
-      abnormalities: string[];
-    };
-    ultrasoundFindings: {
-      leftOvary: { volume: number; follicleCount: number; pcom: boolean };
-      rightOvary: { volume: number; follicleCount: number; pcom: boolean };
-      polycysticAppearance: boolean;
-      endometrialThickness: number;
-      pcomPresent: boolean;
-    };
-    clinicalSymptoms: {
-      menstrual: { cycleLength: number; irregular: boolean; periodDuration: number; ageAtMenarche: number };
-      dermatological: { acne: boolean; acneSeverity: string; hirsutism: boolean; hirsutismScore: number; hairLoss: boolean; skinDarkening: boolean };
-      activeSymptoms: Array<{ name: string; present: boolean; severity?: string; detail?: string }>;
-    };
-    recommendations: Array<{ category: string; items: string[] }>;
-    narrativeSummary: string;
-  };
-  timestamp: string;
-}
-
 export interface FullAnalysisResult {
   success: boolean;
   prediction: {
@@ -756,21 +648,6 @@ export interface FullAnalysisResult {
     name: string;
     description: string;
   };
-  phenotypeDisplay?: {
-    displayName?: string;
-    type?: string;
-    characteristics?: string[];
-  };
-  differential?: {
-    probabilities?: { [key: string]: number };
-    topDistinguishingFeatures?: string[];
-  };
-  biologicalInsights?: {
-    pathways?: Array<{ name: string; reason: string }>;
-    summary?: string;
-  };
-  nextInvestigations?: string[];
-  rotterdamEvaluation: RotterdamEvaluation;
   shap: {
     values: Array<{
       name: string;
@@ -856,12 +733,6 @@ export const healthApi = {
 
   cluster: (data: Record<string, unknown>) =>
     apiCall<ClusterResult>("cluster", data),
-
-  explain: (data: Record<string, unknown>) =>
-    apiCall<ExplainResult>("explain", data),
-
-  patientSummary: (data: Record<string, unknown>) =>
-    apiCall<PatientSummaryResult>("patient-summary", data),
 
   analyze: (data: Record<string, unknown>) =>
     USE_MOCK
