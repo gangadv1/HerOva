@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import Logo from "@/components/branding/logo"
@@ -24,6 +25,12 @@ const steps = [
   { id: "metabolic", title: "Metabolic Indicators", component: MetabolicIndicatorsForm },
   { id: "ultrasound", title: "Ultrasound Findings", component: UltrasoundForm },
   { id: "biomarkers", title: "Lab Biomarkers", component: LabBiomarkersForm },
+]
+
+const quickSteps = [
+  { id: "demographics", title: "Demographics", component: DemographicsForm },
+  { id: "menstrual", title: "Menstrual Health", component: MenstrualHealthForm },
+  { id: "hormonal", title: "Hormonal Symptoms", component: HormonalSymptomsForm },
 ]
 
 export type PatientData = {
@@ -118,12 +125,17 @@ const initialPatientData: PatientData = {
 }
 
 export function PatientAnalysis() {
+  const searchParams = useSearchParams()
+  const initialMode = (searchParams?.get("mode") as string) === "quick" ? "quick" : "full"
+
+  const [mode, setMode] = useState<"full" | "quick">(initialMode)
   const [currentStep, setCurrentStep] = useState(0)
   const [patientData, setPatientData] = useState<PatientData>(initialPatientData)
   const [showResults, setShowResults] = useState(false)
   const [showBodyView, setShowBodyView] = useState(false)
 
-  const progress = ((currentStep + 1) / steps.length) * 100
+  const activeSteps = mode === "quick" ? quickSteps : steps
+  const progress = ((currentStep + 1) / activeSteps.length) * 100
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
@@ -143,10 +155,16 @@ export function PatientAnalysis() {
     setPatientData((prev) => ({ ...prev, ...data }))
   }
 
-  const CurrentForm = steps[currentStep].component
+  const CurrentForm = activeSteps[currentStep].component
+
+  useEffect(() => {
+    // if mode changed via URL or toggle, reset step and results
+    setCurrentStep(0)
+    setShowResults(false)
+  }, [mode])
 
   if (showResults) {
-    return <ResultsDashboard patientData={patientData} onBack={() => setShowResults(false)} />
+    return <ResultsDashboard patientData={patientData} onBack={() => setShowResults(false)} mode={mode} />
   }
 
   return (
@@ -159,6 +177,18 @@ export function PatientAnalysis() {
           </Link>
           
           <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-2">
+              <Button
+                variant={mode === "quick" ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setMode(mode === "quick" ? "full" : "quick")}
+                className="border-purple-500/50 text-foreground hover:bg-purple-500/10"
+              >
+                {mode === "quick" ? "Quick Screening: ON" : "Quick Screening: OFF"}
+              </Button>
+              <span className="text-sm text-muted-foreground">No labs required in Quick Mode</span>
+            </div>
+
             <Button
               variant="outline"
               size="sm"

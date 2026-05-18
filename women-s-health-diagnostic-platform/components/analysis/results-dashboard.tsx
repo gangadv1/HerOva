@@ -15,6 +15,7 @@ import { healthApi, type FullAnalysisResult } from "@/lib/api"
 interface ResultsDashboardProps {
   patientData: PatientData
   onBack: () => void
+  mode?: "full" | "quick"
 }
 
 export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps) {
@@ -113,6 +114,11 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
 
   return (
     <div className="min-h-screen bg-background">
+      {mode === "quick" && (
+        <div className="bg-yellow-50 border-b border-yellow-200 p-4 text-sm text-yellow-800">
+          Quick Screening Mode: Symptom-only assessment (no labs or ultrasound). Use this workflow for low-resource or telehealth settings. Recommendations will suggest next clinical steps and confirmatory testing when needed.
+        </div>
+      )}
       <header className="border-b border-border/50 glass sticky top-0 z-40">
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <button onClick={onBack} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
