@@ -126,9 +126,10 @@ const initialPatientData: PatientData = {
 
 export function PatientAnalysis() {
   const searchParams = useSearchParams()
-  const initialMode = (searchParams?.get("mode") as string) === "quick" ? "quick" : "full"
+  const param = (searchParams?.get("mode") as string) || "full"
+  const initialMode = param === "quick" ? "quick" : param === "telehealth" ? "telehealth" : "full"
 
-  const [mode, setMode] = useState<"full" | "quick">(initialMode)
+  const [mode, setMode] = useState<"full" | "quick" | "telehealth">(initialMode)
   const [currentStep, setCurrentStep] = useState(0)
   const [patientData, setPatientData] = useState<PatientData>(initialPatientData)
   const [showResults, setShowResults] = useState(false)
@@ -187,6 +188,16 @@ export function PatientAnalysis() {
                 {mode === "quick" ? "Quick Screening: ON" : "Quick Screening: OFF"}
               </Button>
               <span className="text-sm text-muted-foreground">No labs required in Quick Mode</span>
+
+              <Button
+                variant={mode === "telehealth" ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setMode(mode === "telehealth" ? "full" : "telehealth")}
+                className="border-cyan-500/50 text-foreground hover:bg-cyan-500/10"
+              >
+                {mode === "telehealth" ? "Telehealth: ON" : "Telehealth"}
+              </Button>
+              <span className="text-sm text-muted-foreground">Remote consultation summary</span>
             </div>
 
             <Button

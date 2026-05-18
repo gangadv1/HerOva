@@ -15,7 +15,7 @@ import { healthApi, type FullAnalysisResult } from "@/lib/api"
 interface ResultsDashboardProps {
   patientData: PatientData
   onBack: () => void
-  mode?: "full" | "quick"
+  mode?: "full" | "quick" | "telehealth"
 }
 
 export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps) {
@@ -24,6 +24,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [teleSummary, setTeleSummary] = useState<string[] | null>(null)
 
   useEffect(() => {
     const runAnalysis = async () => {
@@ -44,6 +45,44 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
     }
     runAnalysis()
   }, [patientData])
+
+  useEffect(() => {
+    if (mode !== "telehealth") return
+    const buildTele = async () => {
+      // Try backend patient summary first, fallback to local summary
+      try {
+        const remote = await healthApi.patientSummary(patientData)
+        if (remote && (remote as any).teleSummary) {
+          setTeleSummary((remote as any).teleSummary as string[])
+          return
+        }
+      } catch {
+        // ignore
+      }
+
+      if (analysis) {
+        const lines: string[] = []
+        const risk = analysis.prediction?.riskLevel ?? "low"
+        const phenotypeType = analysis.phenotype?.type ?? (analysis as any).phenotypeDisplay?.type ?? "NA"
+        if (risk === "high") {
+          lines.push(`High likelihood of Type ${phenotypeType} PCOS`)
+        } else if (risk === "moderate") {
+          lines.push(`Moderate likelihood of Type ${phenotypeType} PCOS`)
+        } else {
+          lines.push(`Low likelihood of PCOS`)
+        }
+
+        // Suggested referrals and tests
+        lines.push("Recommend endocrinology referral")
+        lines.push("Suggested fasting insulin evaluation")
+        lines.push("Follow-up ultrasound recommended when available")
+
+        setTeleSummary(lines)
+      }
+    }
+
+    buildTele()
+  }, [mode, analysis, patientData])
 
   const handleSaveResults = async () => {
     if (!sessionId || !analysis) return
@@ -117,6 +156,16 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
       {mode === "quick" && (
         <div className="bg-yellow-50 border-b border-yellow-200 p-4 text-sm text-yellow-800">
           Quick Screening Mode: Symptom-only assessment (no labs or ultrasound). Use this workflow for low-resource or telehealth settings. Recommendations will suggest next clinical steps and confirmatory testing when needed.
+        </div>
+      )}
+      {mode === "telehealth" && teleSummary && (
+        <div className="bg-cyan-50 border-b border-cyan-200 p-4 text-sm text-cyan-900">
+          <strong>Telehealth Summary:</strong>
+          <ul className="mt-2 list-disc list-inside">
+            {teleSummary.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
         </div>
       )}
       <header className="border-b border-border/50 glass sticky top-0 z-40">
