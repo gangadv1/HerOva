@@ -1,6 +1,7 @@
 
 import { HeroSection } from "@/components/landing/hero-section"
 import { HomeSections } from "@/components/landing/home-sections"
+import { PublicHealthSection } from "@/components/landing/public-health-section"
 import { FeaturesSection } from "@/components/landing/features-section"
 import { ProblemSection } from "@/components/landing/problem-section"
 import { DatasetSection } from "@/components/landing/dataset-section"
@@ -18,6 +19,7 @@ export default function Home() {
       <Navigation />
       <HeroSection />
       <HomeSections />
+      <PublicHealthSection />
       <ProblemSection />
       <FeaturesSection />
       <DatasetSection />
