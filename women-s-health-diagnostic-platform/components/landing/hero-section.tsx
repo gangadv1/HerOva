@@ -47,9 +47,9 @@ export function HeroSection() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-3xl mx-auto leading-relaxed"
           >
-            Explainable AI for early detection of PCOS and endometriosis.
-            <span className="text-purple-400"> Personalized insights.</span>
-            <span className="text-cyan-400"> Better outcomes.</span>
+            Clinically interpretable endocrine diagnostic reasoning.
+            <span className="text-purple-400"> Actionable, auditable outputs.</span>
+            <span className="text-cyan-400"> Patient-centered insights.</span>
           </motion.p>
 
           <motion.div
