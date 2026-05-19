@@ -7,9 +7,75 @@ import Logo from "@/components/branding/logo"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { BodyVisualization } from "@/components/analysis/body-visualization"
 import { ArrowLeft, Upload, FileSpreadsheet, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Loader as Loader2, Download, Users, Activity, X } from "lucide-react"
-import { healthApi, type CSVUploadResult } from "@/lib/api"
+import { healthApi, type CSVUploadResult, type FullAnalysisResult } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
+
+type SelectedPatient = CSVUploadResult["patients"][number] | null
+
+function toNumber(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0
+  if (typeof value === "string") {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function toBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value
+  if (typeof value === "number") return value > 0
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+    return ["1", "true", "yes", "y", "positive", "present"].includes(normalized)
+  }
+  return false
+}
+
+function buildPathwayInsights(patientData: Record<string, unknown>) {
+  return [
+    {
+      name: "Insulin signaling",
+      activity: Math.min(100, 30 + (toNumber(patientData.homaIr) > 2.5 ? 32 : 0) + (toNumber(patientData.fastingGlucose) > 100 ? 8 : 0) + (toNumber(patientData.insulinLevel) > 15 ? 6 : 0)),
+      description: "Insulin resistance and downstream signaling disruption",
+      icon: "🔋",
+    },
+    {
+      name: "Androgen synthesis",
+      activity: Math.min(100, 28 + (toBoolean(patientData.hirsutism) || toBoolean(patientData.acne) ? 28 : 0) + (toNumber(patientData.lhFshRatio) > 2 ? 8 : 0)),
+      description: "Steroidogenic activity linked to androgen excess",
+      icon: "⚡",
+    },
+    {
+      name: "Ovarian follicle regulation",
+      activity: Math.min(100, 30 + (toBoolean(patientData.polycysticAppearance) || toNumber(patientData.follicleCountLeft) >= 12 || toNumber(patientData.follicleCountRight) >= 12 ? 26 : 0) + (toNumber(patientData.amh) > 6 ? 8 : 0) + (toNumber(patientData.cycleLength) > 35 ? 6 : 0)),
+      description: "Follicle maturation and ovulatory regulation",
+      icon: "🫘",
+    },
+    {
+      name: "Inflammatory signaling",
+      activity: Math.min(100, 24 + (toNumber(patientData.homaIr) > 2.5 ? 18 : 0) + (toNumber(patientData.bmi) > 25 ? 8 : 0) + (toBoolean(patientData.skinDarkening) ? 6 : 0)),
+      description: "Low-grade inflammatory activity that can amplify endocrine dysfunction",
+      icon: "🔥",
+    },
+  ].sort((left, right) => right.activity - left.activity)
+}
+
+function buildBiologicalSummary(patientData: Record<string, unknown>, analysis: FullAnalysisResult) {
+  const dominantPathway = buildPathwayInsights(patientData)[0]
+  const phenotypeName = analysis.phenotype?.name || "Unknown phenotype"
+  return `The leading biological signal is ${dominantPathway.name.toLowerCase()} at ${dominantPathway.activity}%, with phenotype assignment of ${phenotypeName}.`
+}
+
+function buildBatchDifferentialDiagnosis(analysis: FullAnalysisResult) {
+  const riskScore = analysis.prediction?.pcosRiskScore ?? 0
+  return [
+    { condition: "PCOS", probability: riskScore, description: "Batch-generated single-patient diagnostic profile", icon: "🫘" },
+    { condition: "Metabolic dysfunction", probability: Math.min(100, Math.max(15, 30 + (analysis.prediction?.riskLevel === "high" ? 25 : 0))), description: "Insulin and metabolic features in the current analysis", icon: "🔋" },
+    { condition: "Non-PCOS / alternative explanation", probability: Math.max(5, 100 - riskScore * 0.8), description: "Residual probability for non-PCOS interpretation", icon: "✓" },
+  ].sort((left, right) => right.probability - left.probability)
+}
 
 export default function CSVUploadPage() {
   const [dragActive, setDragActive] = useState(false)
@@ -20,6 +86,11 @@ export default function CSVUploadPage() {
   const [saving, setSaving] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
+  const [selectedPatient, setSelectedPatient] = useState<SelectedPatient>(null)
+  const [selectedAnalysis, setSelectedAnalysis] = useState<FullAnalysisResult | null>(null)
+  const [selectedAnalysisLoading, setSelectedAnalysisLoading] = useState(false)
+  const [analysisByRow, setAnalysisByRow] = useState<Record<number, FullAnalysisResult>>({})
+  const [referredRows, setReferredRows] = useState<Set<number>>(new Set())
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -77,7 +148,91 @@ export default function CSVUploadPage() {
     setSavedNotice(null)
     setSessionId(null)
     setSaving(false)
+    setSelectedPatient(null)
+    setSelectedAnalysis(null)
+    setSelectedAnalysisLoading(false)
+    setAnalysisByRow({})
+    setReferredRows(new Set())
     if (inputRef.current) inputRef.current.value = ""
+  }
+
+  const openPatientDetails = (patient: SelectedPatient) => {
+    setSelectedPatient(patient)
+    setSelectedAnalysis(patient ? analysisByRow[patient.rowId] ?? null : null)
+  }
+
+  const closePatientDetails = () => {
+    setSelectedPatient(null)
+    setSelectedAnalysis(null)
+    setSelectedAnalysisLoading(false)
+  }
+
+  const persistReferralState = async (rowIds: number[]) => {
+    if (!sessionId || !result) return
+
+    try {
+      await healthApi.session.saveResult(sessionId, {
+        batch_summary: result.summary,
+        batch_patients: result.patients,
+        file_name: file?.name || "batch-upload.csv",
+        source: "batch-upload",
+        referral_row_ids: rowIds,
+        referral_patients: result.patients.filter((item) => rowIds.includes(item.rowId)),
+      })
+    } catch {
+      // Keep the UI responsive if persistence fails.
+    }
+  }
+
+  const generateSinglePatientAnalysis = async (patientOverride?: SelectedPatient) => {
+    const targetPatient = patientOverride ?? selectedPatient
+    if (!targetPatient || selectedAnalysisLoading) return
+
+    setSelectedAnalysisLoading(true)
+    try {
+      const analysis = await healthApi.analyze(targetPatient.patientData)
+      setAnalysisByRow((current) => ({ ...current, [targetPatient.rowId]: analysis }))
+      setSelectedAnalysis(analysis)
+      toast({
+        title: "Single Patient Analysis generated",
+        description: `Analysis complete for row #${targetPatient.rowId}.`,
+      })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to generate analysis"
+      setError(message)
+      toast({
+        title: "Analysis generation failed",
+        description: message,
+        variant: "destructive",
+      })
+    } finally {
+      setSelectedAnalysisLoading(false)
+    }
+  }
+
+  const handleReferPatient = async (patient: SelectedPatient) => {
+    if (!patient) return
+
+    setSelectedPatient(patient)
+    setSelectedAnalysis(analysisByRow[patient.rowId] ?? null)
+
+    if (!analysisByRow[patient.rowId]) {
+      await generateSinglePatientAnalysis(patient)
+    }
+
+    setReferredRows((current) => {
+      const next = new Set(current)
+      next.add(patient.rowId)
+      return next
+    })
+
+    const nextReferralRows = Array.from(new Set([...referredRows, patient.rowId]))
+    await persistReferralState(nextReferralRows)
+
+    toast({
+      title: "Referral queued",
+      description: `Patient #${patient.rowId} has been marked for referral review.`,
+    })
   }
 
   const handleSaveBatch = async () => {
@@ -106,6 +261,8 @@ export default function CSVUploadPage() {
           batch_patients: result.patients,
           file_name: file?.name || "batch-upload.csv",
           source: "batch-upload",
+          referral_row_ids: Array.from(referredRows),
+          referral_patients: result.patients.filter((item) => referredRows.has(item.rowId)),
         })
         setSavedNotice(`Saved batch upload as session ${savedSessionId.slice(0, 8)}.`)
         toast({
@@ -413,13 +570,20 @@ export default function CSVUploadPage() {
                       .sort((a, b) => b.riskScore - a.riskScore)
                       .slice(0, 10)
                       .map((p) => (
-                        <div key={p.rowId} className="flex items-center justify-between p-2 rounded border border-border/30">
+                        <div key={p.rowId} className="flex items-center justify-between gap-3 p-2 rounded border border-border/30 bg-muted/10">
                           <div>
                             <div className="text-sm font-medium">#{p.rowId} — Type {p.phenotype}</div>
                             <div className="text-xs text-muted-foreground">Risk: {p.riskScore}%</div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button size="sm" variant="outline">Refer</Button>
+                            {referredRows.has(p.rowId) ? (
+                              <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30" variant="outline">
+                                Referred
+                              </Badge>
+                            ) : null}
+                            <Button size="sm" variant="outline" onClick={() => handleReferPatient(p)} className="border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10">
+                              Review & Refer
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -455,12 +619,27 @@ export default function CSVUploadPage() {
                         <th className="text-left p-3 text-muted-foreground font-medium">Risk Level</th>
                         <th className="text-left p-3 text-muted-foreground font-medium">Phenotype</th>
                         <th className="text-left p-3 text-muted-foreground font-medium">Key Factors</th>
+                        <th className="text-left p-3 text-muted-foreground font-medium">Analysis</th>
                         <th className="text-left p-3 text-muted-foreground font-medium">Triggered Columns</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {result.patients.map((patient) => (
-                        <tr key={patient.rowId} className="border-b border-border/50 hover:bg-muted/20">
+                      {result.patients.map((patient) => {
+                        const patientAnalysis = analysisByRow[patient.rowId]
+                        return (
+                        <tr
+                          key={patient.rowId}
+                          onClick={() => openPatientDetails(patient)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault()
+                              openPatientDetails(patient)
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          className="border-b border-border/50 hover:bg-muted/20 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                        >
                           <td className="p-3 text-foreground">#{patient.rowId}</td>
                           <td className="p-3">
                             <span className={`font-mono font-bold ${
@@ -497,6 +676,11 @@ export default function CSVUploadPage() {
                             </div>
                           </td>
                           <td className="p-3">
+                            <Badge className={patientAnalysis ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-500/20 text-slate-300 border-slate-500/30"} variant="outline">
+                              {patientAnalysis ? "Analysis Complete" : "Analysis Not Generated"}
+                            </Badge>
+                          </td>
+                          <td className="p-3">
                             <div className="flex flex-wrap gap-1">
                               {patient.triggeredColumns.slice(0, 2).map((column) => (
                                 <span key={column} className="text-xs text-cyan-200 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded">
@@ -509,11 +693,289 @@ export default function CSVUploadPage() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                 </div>
               </Card>
+
+              <AnimatePresence>
+                {selectedPatient && (
+                  <motion.div
+                    key={`patient-modal-${selectedPatient.rowId}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 px-4 py-6"
+                    onClick={closePatientDetails}
+                  >
+                    <motion.div
+                      initial={{ scale: 0.98, y: 20 }}
+                      animate={{ scale: 1, y: 0 }}
+                      exit={{ scale: 0.98, y: 20 }}
+                      transition={{ duration: 0.2 }}
+                      className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background shadow-2xl"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/60 bg-background/95 px-6 py-4 backdrop-blur">
+                        <div>
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-xl font-bold text-foreground">Patient #{selectedPatient.rowId}</h3>
+                            <Badge className={selectedAnalysis ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-500/20 text-slate-300 border-slate-500/30"} variant="outline">
+                              {selectedAnalysis ? "Analysis Complete" : "Analysis Not Generated"}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">Single Patient Analysis detail view from the batch upload overview.</p>
+                        </div>
+                        <Button variant="outline" onClick={closePatientDetails} className="border-border/60 text-foreground hover:bg-muted/20">
+                          <X className="h-4 w-4 mr-2" />
+                          Close
+                        </Button>
+                      </div>
+
+                      <div className="grid gap-6 p-6 xl:grid-cols-[1.05fr_0.95fr]">
+                        <Card className="glass border-purple-500/20 p-6">
+                          <h4 className="mb-4 text-lg font-bold text-foreground">Diagnosis</h4>
+                          {selectedAnalysis ? (
+                            <div className="space-y-4">
+                              <div className="grid grid-cols-3 gap-3">
+                                <div className="rounded-xl border border-border/50 bg-muted/10 p-4">
+                                  <div className="text-xs text-muted-foreground">Risk Score</div>
+                                  <div className="text-3xl font-bold text-cyan-300">{selectedAnalysis.prediction.pcosRiskScore}%</div>
+                                </div>
+                                <div className="rounded-xl border border-border/50 bg-muted/10 p-4">
+                                  <div className="text-xs text-muted-foreground">Risk Level</div>
+                                  <div className="text-2xl font-bold text-foreground capitalize">{selectedAnalysis.prediction.riskLevel}</div>
+                                </div>
+                                <div className="rounded-xl border border-border/50 bg-muted/10 p-4">
+                                  <div className="text-xs text-muted-foreground">Criteria Met</div>
+                                  <div className="text-2xl font-bold text-foreground">{selectedAnalysis.rotterdamEvaluation.criteriaMetCount} / 3</div>
+                                </div>
+                              </div>
+                              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                                <div className="text-sm text-cyan-300">Diagnosis</div>
+                                <div className="text-lg font-semibold text-foreground">{selectedAnalysis.phenotype.name}</div>
+                                <p className="mt-2 text-sm text-muted-foreground">{selectedAnalysis.phenotype.description}</p>
+                              </div>
+                              <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+                                <div className="text-sm font-semibold text-foreground mb-2">Phenotype</div>
+                                <p className="text-sm text-muted-foreground">Type {selectedAnalysis.phenotype.type}</p>
+                                <p className="text-sm text-muted-foreground mt-2">{selectedAnalysis.phenotypeDisplay?.characteristics?.join(" • ") || selectedAnalysis.prediction.contributingFactors.join(" • ")}</p>
+                              </div>
+                              <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
+                                <div className="text-sm font-semibold text-foreground mb-2">Analysis status</div>
+                                <p className="text-sm text-muted-foreground">Patient-specific diagnostics have already been generated for this entry.</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-4">
+                              <div className="rounded-2xl border border-slate-700/60 bg-slate-950/40 p-4">
+                                <div className="text-sm font-semibold text-foreground mb-2">Analysis Not Generated</div>
+                                <p className="text-sm text-muted-foreground">Generate the single-patient analysis to open the detailed diagnostic report for this patient.</p>
+                              </div>
+                              <Button onClick={() => generateSinglePatientAnalysis(selectedPatient)} disabled={selectedAnalysisLoading} className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
+                                {selectedAnalysisLoading ? (
+                                  <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Generating...
+                                  </>
+                                ) : (
+                                  "Generate Single Patient Analysis"
+                                )}
+                              </Button>
+                            </div>
+                          )}
+                        </Card>
+
+                        <div className="space-y-6">
+                          {selectedAnalysis && (
+                            <>
+                              <Card className="glass border-cyan-500/20 p-6">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <Brain className="w-5 h-5 text-cyan-400" />
+                                  <div>
+                                    <h4 className="text-lg font-bold text-foreground">AI Confidence</h4>
+                                    <p className="text-sm text-muted-foreground">Model certainty and report quality</p>
+                                  </div>
+                                </div>
+                                <div className="space-y-4">
+                                  <div>
+                                    <div className="flex justify-between text-sm mb-1">
+                                      <span className="text-muted-foreground">PCOS Classification</span>
+                                      <span className="text-cyan-300">{selectedAnalysis.confidenceMetrics.pcosClassification}%</span>
+                                    </div>
+                                    <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
+                                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" style={{ width: `${selectedAnalysis.confidenceMetrics.pcosClassification}%` }} />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between text-sm mb-1">
+                                      <span className="text-muted-foreground">Phenotype Match</span>
+                                      <span className="text-pink-300">{selectedAnalysis.confidenceMetrics.phenotypeMatch}%</span>
+                                    </div>
+                                    <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
+                                      <div className="h-full rounded-full bg-gradient-to-r from-pink-500 to-rose-500" style={{ width: `${selectedAnalysis.confidenceMetrics.phenotypeMatch}%` }} />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex justify-between text-sm mb-1">
+                                      <span className="text-muted-foreground">Data Quality</span>
+                                      <span className="text-purple-300">{selectedAnalysis.confidenceMetrics.dataQuality}%</span>
+                                    </div>
+                                    <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
+                                      <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500" style={{ width: `${selectedAnalysis.confidenceMetrics.dataQuality}%` }} />
+                                    </div>
+                                  </div>
+                                </div>
+                              </Card>
+
+                              <Card className="glass border-pink-500/20 p-6">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <Info className="w-5 h-5 text-pink-400" />
+                                  <div>
+                                    <h4 className="text-lg font-bold text-foreground">Rotterdam Criteria Evaluation</h4>
+                                    <p className="text-sm text-muted-foreground">Patient-specific criterion status</p>
+                                  </div>
+                                </div>
+                                <div className="space-y-3">
+                                  {[
+                                    { label: "Hyperandrogenism", result: selectedAnalysis.rotterdamEvaluation.hyperandrogenism },
+                                    { label: "Ovulatory dysfunction", result: selectedAnalysis.rotterdamEvaluation.ovulatoryDysfunction },
+                                    { label: "Polycystic ovarian morphology", result: selectedAnalysis.rotterdamEvaluation.polycysticOvaries },
+                                  ].map((criterion) => (
+                                    <div key={criterion.label} className={`rounded-lg border p-3 ${criterion.result.met ? "bg-emerald-500/10 border-emerald-500/30" : "bg-slate-900/30 border-slate-700/40"}`}>
+                                      <div className="flex items-center justify-between gap-3 mb-2">
+                                        <div className="font-semibold text-foreground">{criterion.label}</div>
+                                        <Badge className={criterion.result.met ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-500/20 text-slate-300 border-slate-500/30"}>
+                                          {criterion.result.met ? "Met" : "Not met"}
+                                        </Badge>
+                                      </div>
+                                      <p className="text-sm text-muted-foreground mb-2">{criterion.result.reasoning}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </Card>
+
+                              <Card className="glass border-cyan-500/20 p-6">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <TrendingUp className="w-5 h-5 text-cyan-400" />
+                                  <div>
+                                    <h4 className="text-lg font-bold text-foreground">Differential Diagnosis</h4>
+                                    <p className="text-sm text-muted-foreground">Patient-specific probability distribution</p>
+                                  </div>
+                                </div>
+                                <div className="space-y-3">
+                                  {buildBatchDifferentialDiagnosis(selectedAnalysis).map((diagnosis) => (
+                                    <div key={diagnosis.condition} className="space-y-2 rounded-lg border border-border/50 bg-muted/10 p-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                                          <span className="text-lg">{diagnosis.icon}</span>
+                                          <div className="min-w-0">
+                                            <div className="font-semibold text-sm text-foreground truncate">{diagnosis.condition}</div>
+                                            <p className="text-xs text-muted-foreground line-clamp-2">{diagnosis.description}</p>
+                                          </div>
+                                        </div>
+                                        <span className="text-sm font-bold flex-shrink-0 w-12 text-right text-cyan-300">{diagnosis.probability}%</span>
+                                      </div>
+                                      <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" style={{ width: `${diagnosis.probability}%` }} />
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </Card>
+
+                              <Card className="glass border-cyan-500/20 p-6">
+                                <h4 className="mb-4 text-lg font-bold text-foreground">Pathway Insights</h4>
+                                <div className="space-y-3">
+                                  {buildPathwayInsights(selectedPatient.patientData).map((pathway) => (
+                                    <div key={pathway.name} className="rounded-xl border border-border/50 bg-muted/10 p-3">
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div>
+                                          <div className="font-semibold text-foreground">{pathway.icon} {pathway.name}</div>
+                                          <p className="text-sm text-muted-foreground">{pathway.description}</p>
+                                        </div>
+                                        <div className="text-xl font-bold text-foreground">{pathway.activity}%</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </Card>
+
+                              <Card className="glass border-pink-500/20 p-6">
+                                <h4 className="mb-4 text-lg font-bold text-foreground">Biological Insights</h4>
+                                <p className="text-sm text-muted-foreground">{buildBiologicalSummary(selectedPatient.patientData, selectedAnalysis)}</p>
+                                <div className="mt-4 space-y-2">
+                                  {selectedAnalysis.humanReasoning?.map((line) => (
+                                    <div key={line} className="rounded-xl border border-border/50 bg-muted/10 px-3 py-2 text-sm text-foreground">{line}</div>
+                                  ))}
+                                </div>
+                              </Card>
+
+                              <Card className="glass border-yellow-500/20 p-6">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <Users className="w-5 h-5 text-yellow-400" />
+                                  <div>
+                                    <h4 className="text-lg font-bold text-foreground">Referral Priority Queue</h4>
+                                    <p className="text-sm text-muted-foreground">Operational next step from this patient report</p>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                  {referredRows.has(selectedPatient.rowId) ? (
+                                    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30" variant="outline">Referred</Badge>
+                                  ) : null}
+                                  <Button
+                                    onClick={() => {
+                                      setReferredRows((current) => {
+                                        const next = new Set(current)
+                                        next.add(selectedPatient.rowId)
+                                        return next
+                                      })
+                                      void persistReferralState(Array.from(new Set([...referredRows, selectedPatient.rowId])))
+                                      toast({
+                                        title: "Referral sent",
+                                        description: `Patient #${selectedPatient.rowId} added to the referral queue.`,
+                                      })
+                                    }}
+                                    className="bg-yellow-500 text-slate-950 hover:bg-yellow-400"
+                                  >
+                                    Send to Referral Queue
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => generateSinglePatientAnalysis(selectedPatient)}
+                                    disabled={selectedAnalysisLoading}
+                                    className="border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10"
+                                  >
+                                    Refresh Analysis
+                                  </Button>
+                                </div>
+                              </Card>
+
+                              <Card className="glass border-purple-500/20 p-6">
+                                <h4 className="mb-4 text-lg font-bold text-foreground">Body Visualization</h4>
+                                <BodyVisualization patientData={selectedPatient.patientData} highlights={selectedAnalysis.bodyHighlights} />
+                              </Card>
+
+                              <Card className="glass border-cyan-500/20 p-6">
+                                <h4 className="mb-4 text-lg font-bold text-foreground">Suggested Next Investigations</h4>
+                                <div className="space-y-2">
+                                  {(selectedAnalysis.suggestedInvestigations || []).map((item, index) => (
+                                    <div key={item} className="flex items-start gap-3 rounded-xl border border-border/50 bg-muted/10 p-3">
+                                      <div className="w-6 h-6 rounded-full bg-cyan-500/10 flex items-center justify-center text-xs text-cyan-300 mt-0.5">{index + 1}</div>
+                                      <div className="text-sm text-foreground">{item}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </Card>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Disclaimer */}
               <div className="p-4 rounded-xl bg-muted/30 border border-border mb-6">
