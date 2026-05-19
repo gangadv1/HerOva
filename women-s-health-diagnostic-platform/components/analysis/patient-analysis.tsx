@@ -8,7 +8,7 @@ import Logo from "@/components/branding/logo"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, ArrowRight, Check } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, Info, SkipForward } from "lucide-react"
 import { DemographicsForm } from "./forms/demographics-form"
 import { MenstrualHealthForm } from "./forms/menstrual-health-form"
 import { HormonalSymptomsForm } from "./forms/hormonal-symptoms-form"
@@ -18,12 +18,12 @@ import { LabBiomarkersForm } from "./forms/lab-biomarkers-form"
 import { ResultsDashboard } from "./results-dashboard"
 
 const steps = [
-  { id: "demographics", title: "Demographics", component: DemographicsForm },
-  { id: "menstrual", title: "Menstrual Health", component: MenstrualHealthForm },
-  { id: "hormonal", title: "Hormonal Symptoms", component: HormonalSymptomsForm },
-  { id: "metabolic", title: "Metabolic Indicators", component: MetabolicIndicatorsForm },
-  { id: "ultrasound", title: "Ultrasound Findings", component: UltrasoundForm },
-  { id: "biomarkers", title: "Lab Biomarkers", component: LabBiomarkersForm },
+  { id: "demographics", title: "Demographics", component: DemographicsForm, required: true },
+  { id: "menstrual", title: "Menstrual Health", component: MenstrualHealthForm, required: true },
+  { id: "hormonal", title: "Hormonal Symptoms", component: HormonalSymptomsForm, required: true },
+  { id: "metabolic", title: "Metabolic Indicators", component: MetabolicIndicatorsForm, required: false },
+  { id: "ultrasound", title: "Ultrasound Findings", component: UltrasoundForm, required: false },
+  { id: "biomarkers", title: "Lab Biomarkers", component: LabBiomarkersForm, required: false },
 ]
 
 // quickSteps removed — Quick Screening mode deprecated
@@ -131,6 +131,7 @@ export function PatientAnalysis() {
 
   const activeSteps = steps
   const progress = ((currentStep + 1) / activeSteps.length) * 100
+  const isCurrentStepOptional = !activeSteps[currentStep].required
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
@@ -192,13 +193,16 @@ export function PatientAnalysis() {
         {/* Progress */}
         <div className="max-w-4xl mx-auto mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-2xl font-bold text-foreground">Patient Analysis</h1>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Patient Analysis</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">Steps 1–3 are required. Steps 4–6 are optional — skip any that are unavailable.</p>
+            </div>
             <span className="text-sm text-muted-foreground">
               Step {currentStep + 1} of {steps.length}
             </span>
           </div>
           <Progress value={progress} className="h-2" />
-          
+
           {/* Step indicators */}
           <div className="flex justify-between mt-4">
             {steps.map((step, index) => (
@@ -219,9 +223,22 @@ export function PatientAnalysis() {
                   {index < currentStep ? <Check className="w-4 h-4" /> : index + 1}
                 </div>
                 <span className="text-xs hidden sm:block">{step.title}</span>
+                {!step.required && (
+                  <span className="text-xs hidden sm:block text-muted-foreground/60 italic">optional</span>
+                )}
               </button>
             ))}
           </div>
+
+          {/* Low-resource notice — shown once when entering first optional step */}
+          {isCurrentStepOptional && (
+            <div className="mt-4 flex items-start gap-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-sm text-cyan-300">
+              <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span>
+                <strong>Optional step.</strong> If this data is not available (e.g. no ultrasound access or lab results), you can skip to the next step. The system will still generate a risk assessment from the data provided so far.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Main content */}
@@ -259,13 +276,25 @@ export function PatientAnalysis() {
             Previous
           </Button>
 
-          <Button
-            onClick={handleNext}
-            className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0"
-          >
-            {currentStep === steps.length - 1 ? "View Results" : "Next"}
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
+          <div className="flex items-center gap-3">
+            {isCurrentStepOptional && currentStep < steps.length - 1 && (
+              <Button
+                variant="ghost"
+                onClick={handleNext}
+                className="text-muted-foreground hover:text-foreground text-sm"
+              >
+                <SkipForward className="w-4 h-4 mr-1" />
+                Skip
+              </Button>
+            )}
+            <Button
+              onClick={handleNext}
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0"
+            >
+              {currentStep === steps.length - 1 ? "View Results" : "Next"}
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>

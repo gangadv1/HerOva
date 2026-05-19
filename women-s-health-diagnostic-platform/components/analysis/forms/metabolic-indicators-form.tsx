@@ -3,6 +3,7 @@
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
+import { FlaskConical } from "lucide-react"
 import type { PatientData } from "../patient-analysis"
 
 interface FormProps {
@@ -13,6 +14,13 @@ interface FormProps {
 export function MetabolicIndicatorsForm({ data, updateData }: FormProps) {
   return (
     <div className="grid gap-6">
+      {/* Optional step notice */}
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+        <FlaskConical className="w-4 h-4 mt-0.5 flex-shrink-0" />
+        <span>
+          <strong>Optional — </strong>enter values if available. If fasting glucose or insulin results are not at hand, leave the defaults and proceed. The system will note reduced data quality in the confidence metrics.
+        </span>
+      </div>
       {/* Glucose & Insulin */}
       <div className="grid md:grid-cols-2 gap-6">
         <div className="space-y-2">

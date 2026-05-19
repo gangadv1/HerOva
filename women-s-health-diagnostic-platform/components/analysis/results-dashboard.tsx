@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap, Info } from "lucide-react"
+import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap, Info, Printer, ShieldAlert } from "lucide-react"
 import type { PatientData } from "./patient-analysis"
 import { healthApi, type FullAnalysisResult, type PredictionResult, type RotterdamEvaluation } from "@/lib/api"
 import { InteractiveBodyViewer } from "@/components/body-viewer/interactive-body-viewer"
@@ -603,7 +603,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
       </header>
 
       <div className="container mx-auto px-6 py-8">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-4">
             <span className="text-foreground">Patient Results </span>
             <span className="text-gradient-purple-pink">Report</span>
@@ -611,6 +611,71 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           <p className="text-muted-foreground max-w-2xl mx-auto">
             Individualized endocrine intelligence report driven by the current patient inputs, model outputs, SHAP explainability, and phenotype clustering.
           </p>
+        </motion.div>
+
+        {/* Clinical disclaimer — prominent, top-of-report */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mb-6">
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30 text-sm text-yellow-200">
+            <ShieldAlert className="w-5 h-5 mt-0.5 flex-shrink-0 text-yellow-400" />
+            <span>
+              <strong className="text-yellow-300">Clinical decision-support only.</strong> This report is designed to assist — not replace — clinician judgment. Results are prototype-level and require validation before clinical deployment. Always correlate findings with a full clinical assessment and consult a qualified healthcare provider before acting on this output.
+            </span>
+          </div>
+        </motion.div>
+
+        {/* Plain-language summary card */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="mb-8">
+          <Card className="glass border-purple-500/20 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-foreground">Plain-Language Summary</h3>
+                <p className="text-sm text-muted-foreground">Quick-read interpretation for clinicians and care teams</p>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <span className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${predictionSnapshot.riskLevel === "high" ? "bg-pink-400" : predictionSnapshot.riskLevel === "moderate" ? "bg-yellow-400" : "bg-green-400"}`} />
+                  <span className="text-foreground">
+                    <strong>Risk level:</strong>{" "}
+                    {predictionSnapshot.riskLevel === "high"
+                      ? "High — clinical follow-up is recommended."
+                      : predictionSnapshot.riskLevel === "moderate"
+                      ? "Moderate — further investigation may be warranted."
+                      : "Low — routine monitoring is suggested."}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 w-2 h-2 rounded-full flex-shrink-0 bg-cyan-400" />
+                  <span className="text-foreground">
+                    <strong>Rotterdam criteria:</strong>{" "}
+                    {predictionSnapshot.rotterdamEvaluation.criteriaMetCount}/3 criteria met.{" "}
+                    {predictionSnapshot.rotterdamEvaluation.diagnosisMet
+                      ? "PCOS diagnosis is supported."
+                      : "Insufficient criteria for a Rotterdam diagnosis — probabilistic assessment only."}
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 w-2 h-2 rounded-full flex-shrink-0 bg-purple-400" />
+                  <span className="text-foreground">
+                    <strong>Phenotype:</strong> Type {predictionSnapshot.phenotype.type} — {predictionSnapshot.phenotype.name}.
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="mt-1 w-2 h-2 rounded-full flex-shrink-0 bg-pink-400" />
+                  <span className="text-foreground">
+                    <strong>Suggested action:</strong>{" "}
+                    {predictionSnapshot.recommendations[0] ?? "Review full report below for clinical next steps."}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </Card>
         </motion.div>
 
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
@@ -1062,14 +1127,6 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="mt-8 p-4 rounded-xl bg-muted/30 border border-border">
-          <p className="text-xs text-muted-foreground text-center">
-            <strong>Disclaimer:</strong> This AI-powered analysis is for research and educational purposes only.
-            It should not be used as a substitute for professional medical advice, diagnosis, or treatment.
-            Always consult with a qualified healthcare provider for clinical decisions.
-          </p>
-        </motion.div>
-
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.0 }} className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button variant="outline" onClick={onBack} className="border-purple-500/50 text-foreground hover:bg-purple-500/10">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -1078,6 +1135,10 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           <Button variant="outline" onClick={handleSaveResults} disabled={saving || !sessionId} className="border-cyan-500/50 text-foreground hover:bg-cyan-500/10">
             {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Save Results
+          </Button>
+          <Button variant="outline" onClick={() => window.print()} className="border-green-500/50 text-foreground hover:bg-green-500/10">
+            <Printer className="w-4 h-4 mr-2" />
+            Print / Export PDF
           </Button>
           <Link href="/molecular">
             <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
