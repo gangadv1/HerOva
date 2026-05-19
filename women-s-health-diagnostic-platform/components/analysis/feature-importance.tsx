@@ -80,13 +80,13 @@ export function FeatureImportance({
   const getImpactColor = (impact: string) => {
     switch (impact) {
       case "high":
-        return "bg-red-100 text-red-800"
+        return "bg-pink-500/20 text-pink-300 border-pink-500/30"
       case "moderate":
-        return "bg-orange-100 text-orange-800"
+        return "bg-yellow-500/20 text-yellow-300 border-yellow-500/30"
       case "low":
-        return "bg-yellow-100 text-yellow-800"
+        return "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
       default:
-        return "bg-slate-100 text-slate-800"
+        return "bg-slate-500/20 text-slate-300 border-slate-500/30"
     }
   }
 
@@ -102,42 +102,42 @@ export function FeatureImportance({
   }
 
   return (
-    <Card className="bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200 p-6">
+    <Card className="glass border-teal-500/30 p-6">
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="w-5 h-5 text-amber-700" />
-          <h3 className="text-xl font-bold text-slate-900">Feature Importance (SHAP Analysis)</h3>
+          <TrendingUp className="w-5 h-5 text-teal-400" />
+          <h3 className="text-xl font-bold text-foreground">Feature Importance (SHAP Analysis)</h3>
         </div>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-muted-foreground">
           Top contributing factors ranked by impact on PCOS risk score
         </p>
       </div>
 
       <div className="space-y-2.5">
         {features.map((feature, idx) => (
-          <div key={idx} className="bg-white border border-amber-100 rounded-lg p-3">
+          <div key={idx} className="bg-slate-900/40 border border-slate-700/50 rounded-lg p-3 hover:border-teal-500/50 transition-colors">
             <div className="flex items-start justify-between gap-3 mb-2">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg font-bold text-amber-700">{idx + 1}.</span>
-                  <span className="font-semibold text-slate-900 text-sm">{feature.feature}</span>
-                  <Badge className={getImpactColor(feature.impact)} variant="secondary">
+                  <span className="text-lg font-bold text-teal-400">{idx + 1}.</span>
+                  <span className="font-semibold text-foreground text-sm">{feature.feature}</span>
+                  <Badge className={`${getImpactColor(feature.impact)} border`} variant="secondary">
                     {feature.impact.charAt(0).toUpperCase() + feature.impact.slice(1)}
                   </Badge>
                 </div>
                 {feature.threshold && (
-                  <p className="text-xs text-slate-500 ml-7">{feature.threshold}</p>
+                  <p className="text-xs text-muted-foreground ml-7">{feature.threshold}</p>
                 )}
               </div>
-              <span className="text-lg font-bold text-orange-600 flex-shrink-0">
+              <span className="text-lg font-bold text-pink-400 flex-shrink-0">
                 {getDirectionIcon(feature.direction)}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+              <div className="flex-1 h-2 bg-slate-700/50 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full"
+                  className="h-full bg-gradient-to-r from-teal-500 to-cyan-400 rounded-full"
                   style={{ width: `${feature.value * 100}%` }}
                 />
               </div>

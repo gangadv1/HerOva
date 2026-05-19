@@ -43,10 +43,10 @@ export function DifferentialDiagnosis({
   const sortedDiagnoses = [...diagnoses].sort((a, b) => b.probability - a.probability)
 
   return (
-    <Card className="bg-gradient-to-br from-indigo-50 to-purple-50 border-indigo-200 p-6">
+    <Card className="glass border-pink-500/30 p-6">
       <div className="mb-6">
-        <h3 className="text-xl font-bold text-slate-900 mb-1">Differential Diagnosis Analysis</h3>
-        <p className="text-sm text-slate-600">
+        <h3 className="text-xl font-bold text-foreground mb-1">Differential Diagnosis Analysis</h3>
+        <p className="text-sm text-muted-foreground">
           Comparative diagnostic reasoning across key reproductive endocrine conditions
         </p>
       </div>
@@ -60,34 +60,34 @@ export function DifferentialDiagnosis({
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="text-lg flex-shrink-0">{diag.icon}</span>
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold text-sm text-slate-900 truncate">
+                    <div className="font-semibold text-sm text-foreground truncate">
                       {diag.condition}
                     </div>
-                    <p className="text-xs text-slate-600 mt-0.5 line-clamp-2">
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                       {diag.description}
                     </p>
                   </div>
                 </div>
                 {isPrimary && (
-                  <Badge className="bg-emerald-600 hover:bg-emerald-700 flex-shrink-0">
+                  <Badge className="bg-emerald-500/30 hover:bg-emerald-500/50 text-emerald-300 border border-emerald-500/30 flex-shrink-0">
                     Primary
                   </Badge>
                 )}
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="flex-1 h-2 bg-slate-700/50 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
                       isPrimary
-                        ? "bg-gradient-to-r from-emerald-500 to-emerald-400"
-                        : "bg-gradient-to-r from-slate-400 to-slate-300"
+                        ? "bg-gradient-to-r from-pink-500 to-pink-400"
+                        : "bg-gradient-to-r from-slate-500 to-slate-400"
                     }`}
                     style={{ width: `${diag.probability}%` }}
                   />
                 </div>
                 <span className={`text-sm font-bold flex-shrink-0 w-12 text-right ${
-                  isPrimary ? "text-emerald-700" : "text-slate-600"
+                  isPrimary ? "text-pink-400" : "text-slate-400"
                 }`}>
                   {diag.probability}%
                 </span>
@@ -97,15 +97,15 @@ export function DifferentialDiagnosis({
         })}
       </div>
 
-      <div className="bg-white border border-indigo-100 rounded-lg p-4 text-xs text-slate-700 space-y-2">
-        <div className="font-semibold text-indigo-900">Clinical Interpretation:</div>
-        <p>
-          The patient presents with a <strong>78% probability of PCOS</strong> based on clinical and biochemical
+      <div className="bg-slate-900/40 border border-pink-500/30 rounded-lg p-4 text-xs text-foreground space-y-2">
+        <div className="font-semibold text-pink-400">Clinical Interpretation:</div>
+        <p className="text-muted-foreground">
+          The patient presents with a <strong className="text-foreground">78% probability of PCOS</strong> based on clinical and biochemical
           evidence including irregular menstrual cycles, elevated androgen markers, and ultrasound findings consistent
           with polycystic ovarian morphology. Differential diagnosis includes endometriosis (14%) given potential pelvic
           pain symptoms, though ovarian morphology is more consistent with PCOS.
         </p>
-        <p className="text-indigo-700 font-medium">
+        <p className="text-pink-300 font-medium">
           ⚕️ Recommendation: Proceed with PCOS-specific management strategy while monitoring for overlapping conditions.
         </p>
       </div>
