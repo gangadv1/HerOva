@@ -180,13 +180,16 @@ function parseCsvText(csvText: string): Array<Record<string, string>> {
   const delimiter = detectDelimiter(lines[0]);
   const headers = splitCsvLine(lines[0], delimiter).map((header) => header.trim().replace(/^\uFEFF/, ""));
 
-  return lines.slice(1).map((line) => {
-    const values = splitCsvLine(line, delimiter);
-    return headers.reduce<Record<string, string>>((row, header, index) => {
-      row[header] = (values[index] ?? "").trim();
-      return row;
-    }, {});
-  });
+  return lines
+    .slice(1)
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const values = splitCsvLine(line, delimiter);
+      return headers.reduce<Record<string, string>>((row, header, index) => {
+        row[header] = (values[index] ?? "").trim();
+        return row;
+      }, {});
+    });
 }
 
 function toNumber(value: unknown): number {
@@ -284,8 +287,10 @@ function buildPatientFromUploadedRow(row: Record<string, string>) {
   const skinDarkening = isYesLike(getField(row, ["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"]));
   const hairLoss = isYesLike(getField(row, ["Hair loss(Y/N)", "Hair_Loss", "hair_loss"]));
   const pimples = isYesLike(getField(row, ["Pimples(Y/N)", "Acne", "acne"]));
-  const fastFood = isYesLike(getField(row, ["Fast food (Y/N)", "fast_food"]));
-  const regularExercise = isYesLike(getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"]));
+  const fastFoodRaw = getField(row, ["Fast food (Y/N)", "fast_food"]);
+  const fastFood = fastFoodRaw !== "" ? isYesLike(fastFoodRaw) : false;
+  const exerciseRaw = getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"]);
+  const regularExercise = exerciseRaw !== "" ? isYesLike(exerciseRaw) : true;
   const cycleIsIrregular = isIrregularCycleValue(cycleValue);
 
   return {
@@ -506,12 +511,13 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
     const risk = calculateLocalRisk(patient);
     const phenotype = determineLocalPhenotype(patient);
     const triggeredColumns = getTriggeredColumns(row, patient);
+    const riskLevel = risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low";
 
     return {
       rowId: index + 1,
       patientData: patient,
       riskScore: risk.score,
-      riskLevel: risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low",
+      riskLevel,
       phenotype: phenotype.type,
       phenotypeName: phenotype.name,
       factors: risk.factors,
