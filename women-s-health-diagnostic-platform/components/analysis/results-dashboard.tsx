@@ -11,6 +11,10 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap } from "lucide-react"
 import type { PatientData } from "./patient-analysis"
 import { healthApi, type FullAnalysisResult } from "@/lib/api"
+import { RotterdamCriteria } from "./rotterdam-criteria"
+import { DifferentialDiagnosis } from "./differential-diagnosis"
+import { FeatureImportance } from "./feature-importance"
+import { BiologicalInsights } from "./biological-insights"
 
 interface ResultsDashboardProps {
   patientData: PatientData
@@ -251,8 +255,41 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
-        {/* Cluster Assignment */}
+        {/* CLINICAL FOUNDATION: Rotterdam Criteria */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mb-8">
+          <RotterdamCriteria
+            hyperandrogenism={analysis.Rotterdam.hyperandrogenism}
+            ovulatoryDysfunction={analysis.Rotterdam.ovulatoryDysfunction}
+            polycysticOvaries={analysis.Rotterdam.polycysticOvaries}
+          />
+        </motion.div>
+
+        {/* DIFFERENTIAL DIAGNOSIS: Competing Conditions */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="mb-8">
+          <DifferentialDiagnosis />
+        </motion.div>
+
+        {/* SHAP FEATURE IMPORTANCE: Explainability */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-8">
+          <FeatureImportance />
+        </motion.div>
+
+        {/* BIOLOGICAL INSIGHTS: Phenotype & Molecular Pathways */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mb-8">
+          <BiologicalInsights
+            phenotype={phenotype.type}
+            subtypeLabel={
+              prediction.riskLevel === "high"
+                ? "Insulin-Resistant Metabolic Phenotype"
+                : prediction.riskLevel === "moderate"
+                  ? "Mixed Metabolic Phenotype"
+                  : "Lean PCOS Phenotype"
+            }
+          />
+        </motion.div>
+
+        {/* Cluster Assignment */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }} className="mb-8">
           <Card className="glass border-cyan-500/20 p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center">

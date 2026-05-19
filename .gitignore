@@ -1,2 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+/.venv
+env/
+*.egg-info/
+dist/
+.DS_Store
+.next/
 node_modules/
+npm-debug.log*
+pnpm-lock.yaml
+yarn.lock
+/*.lognode_modules/
 .env
