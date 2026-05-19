@@ -495,7 +495,19 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
 function determineLocalPhenotype(patient: ReturnType<typeof buildPatientFromUploadedRow>) {
   const hasOligo = patient.irregularPeriods || patient.cycleLength > 35;
   const hasHA = patient.hirsutism || patient.acne || patient.hairLoss || patient.skinDarkening;
-  const hasPCOM = patient.follicleCountLeft >= 12 || patient.follicleCountRight >= 12;
+
+  // Extended PCOM: per-ovary threshold (≥12) OR combined bilateral count (≥20).
+  // Combined count of 20+ across both ovaries represents bilateral polycystic morphology
+  // even when neither ovary individually reaches 12.
+  const totalFollicles = patient.follicleCountLeft + patient.follicleCountRight;
+  const hasPCOM = patient.follicleCountLeft >= 12 || patient.follicleCountRight >= 12 || totalFollicles >= 20;
+
+  // Low-reserve exclusion: irregular cycles + HA with very low ovarian reserve markers
+  // (total follicles < 6 AND AMH < 2 ng/mL) is more consistent with POI or hypothalamic
+  // amenorrhea than PCOS, which characteristically shows excess follicles and high AMH.
+  if (totalFollicles < 6 && patient.amh < 2 && hasOligo && hasHA) {
+    return { type: "NA", name: "Non-PCOS" };
+  }
 
   if (hasOligo && hasHA && hasPCOM) return { type: "A", name: "Classic PCOS" };
   if (hasOligo && hasHA) return { type: "B", name: "Non-PCO PCOS" };
@@ -528,17 +540,9 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
   const phenotypeDistribution: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, NA: 0 };
   for (const patient of patients) phenotypeDistribution[patient.phenotype] = (phenotypeDistribution[patient.phenotype] || 0) + 1;
 
-  // PCOS Positive: read directly from the PCOS (Y/N) column when present in the CSV.
-  // Handles numeric 1, string "1", "Y", "Yes", "true" (case-insensitive).
-  // Falls back to computed phenotype when the column is absent.
-  const pcosColValues = rows.map((row) => getField(row, ["PCOS (Y/N)", "PCOS(Y/N)", "pcos_yn", "PCOS", "pcos"]));
-  const hasPcosColumn = pcosColValues.some((v) => v !== "");
-  const pcosPositive = hasPcosColumn
-    ? pcosColValues.filter((v) => {
-        const norm = v.trim().toLowerCase();
-        return norm === "1" || norm === "y" || norm === "yes" || norm === "true";
-      }).length
-    : patients.filter((patient) => patient.phenotype !== "NA").length;
+  // PCOS Positive: inferred from clinical features via Rotterdam criteria + extended PCOM/POI logic.
+  // PCOS (Y/N) ground-truth labels are for offline validation only — not used in production.
+  const pcosPositive = patients.filter((patient) => patient.phenotype !== "NA").length;
 
   return {
     success: true,
