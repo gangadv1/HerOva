@@ -180,13 +180,16 @@ function parseCsvText(csvText: string): Array<Record<string, string>> {
   const delimiter = detectDelimiter(lines[0]);
   const headers = splitCsvLine(lines[0], delimiter).map((header) => header.trim().replace(/^\uFEFF/, ""));
 
-  return lines.slice(1).map((line) => {
-    const values = splitCsvLine(line, delimiter);
-    return headers.reduce<Record<string, string>>((row, header, index) => {
-      row[header] = (values[index] ?? "").trim();
-      return row;
-    }, {});
-  });
+  return lines
+    .slice(1)
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const values = splitCsvLine(line, delimiter);
+      return headers.reduce<Record<string, string>>((row, header, index) => {
+        row[header] = (values[index] ?? "").trim();
+        return row;
+      }, {});
+    });
 }
 
 function toNumber(value: unknown): number {
@@ -284,8 +287,10 @@ function buildPatientFromUploadedRow(row: Record<string, string>) {
   const skinDarkening = isYesLike(getField(row, ["Skin darkening (Y/N)", "Skin_Darkening", "skin_darkening"]));
   const hairLoss = isYesLike(getField(row, ["Hair loss(Y/N)", "Hair_Loss", "hair_loss"]));
   const pimples = isYesLike(getField(row, ["Pimples(Y/N)", "Acne", "acne"]));
-  const fastFood = isYesLike(getField(row, ["Fast food (Y/N)", "fast_food"]));
-  const regularExercise = isYesLike(getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"]));
+  const fastFoodRaw = getField(row, ["Fast food (Y/N)", "fast_food"]);
+  const fastFood = fastFoodRaw !== "" ? isYesLike(fastFoodRaw) : false;
+  const exerciseRaw = getField(row, ["Reg.Exercise(Y/N)", "regular_exercise"]);
+  const regularExercise = exerciseRaw !== "" ? isYesLike(exerciseRaw) : true;
   const cycleIsIrregular = isIrregularCycleValue(cycleValue);
 
   return {
@@ -451,7 +456,7 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
     score += 12;
     factors.push("Elevated AMH");
   }
-  if (patient.lhFshRatio >= 2 || (patient.lh > 0 && patient.fsh / patient.lh >= 2)) {
+  if (patient.lhFshRatio >= 2) {
     score += 12;
     factors.push("Elevated FSH:LH ratio");
   }
@@ -459,7 +464,7 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
     score += 18;
     factors.push("Polycystic ovarian morphology");
   }
-  if (patient.bmi >= 25 || patient.weight > 0 && patient.weight / ((patient.height / 100) ** 2) >= 25) {
+  if (patient.bmi >= 25) {
     score += 10;
     factors.push("Elevated BMI");
   }
@@ -479,7 +484,7 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
     score += 5;
     factors.push("Low physical activity");
   }
-  if (patient.tsh > 4.5 || patient.prolactin > 25 || patient.vitD3 > 0 && patient.vitD3 < 20) {
+  if (patient.tsh > 4.5 || patient.prolactin > 25 || (patient.vitD3 > 0 && patient.vitD3 < 20)) {
     score += 5;
     factors.push("Hormonal or metabolic imbalance");
   }
@@ -506,12 +511,13 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
     const risk = calculateLocalRisk(patient);
     const phenotype = determineLocalPhenotype(patient);
     const triggeredColumns = getTriggeredColumns(row, patient);
+    const riskLevel = risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low";
 
     return {
       rowId: index + 1,
       patientData: patient,
       riskScore: risk.score,
-      riskLevel: risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low",
+      riskLevel,
       phenotype: phenotype.type,
       phenotypeName: phenotype.name,
       factors: risk.factors,
@@ -522,12 +528,24 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
   const phenotypeDistribution: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, NA: 0 };
   for (const patient of patients) phenotypeDistribution[patient.phenotype] = (phenotypeDistribution[patient.phenotype] || 0) + 1;
 
+  // PCOS Positive: read directly from the PCOS (Y/N) column when present in the CSV.
+  // Handles numeric 1, string "1", "Y", "Yes", "true" (case-insensitive).
+  // Falls back to computed phenotype when the column is absent.
+  const pcosColValues = rows.map((row) => getField(row, ["PCOS (Y/N)", "PCOS(Y/N)", "pcos_yn", "PCOS", "pcos"]));
+  const hasPcosColumn = pcosColValues.some((v) => v !== "");
+  const pcosPositive = hasPcosColumn
+    ? pcosColValues.filter((v) => {
+        const norm = v.trim().toLowerCase();
+        return norm === "1" || norm === "y" || norm === "yes" || norm === "true";
+      }).length
+    : patients.filter((patient) => patient.phenotype !== "NA").length;
+
   return {
     success: true,
     summary: {
       totalRows: rows.length,
       processedPatients: patients.length,
-      pcosPositive: patients.filter((patient) => patient.phenotype !== "NA").length,
+      pcosPositive,
       highRisk: patients.filter((patient) => patient.riskLevel === "high").length,
       moderateRisk: patients.filter((patient) => patient.riskLevel === "moderate").length,
       lowRisk: patients.filter((patient) => patient.riskLevel === "low").length,
