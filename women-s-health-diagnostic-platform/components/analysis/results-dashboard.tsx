@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap, Info } from "lucide-react"
 import type { PatientData } from "./patient-analysis"
+import { BodyVisualization } from "./body-visualization"
 import { healthApi, type FullAnalysisResult, type PredictionResult, type RotterdamEvaluation } from "@/lib/api"
 
 interface ResultsDashboardProps {
@@ -444,6 +445,9 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
 
   const predictionSnapshot = prediction ?? buildPredictionFallback(patientData)
   const analysisSnapshot = analysis ?? buildLocalAnalysis(patientData, predictionSnapshot)
+  const humanReasoning = (analysisSnapshot as any).humanReasoning ?? []
+  const suggestedInvestigationsList = (analysisSnapshot as any).suggestedInvestigations ?? (analysisSnapshot.nextInvestigations ?? [])
+  const bodyHighlights = (analysisSnapshot as any).bodyHighlights ?? {}
   const rotterdam = predictionSnapshot.rotterdamEvaluation
   const shap = analysisSnapshot.shap ?? { values: buildShapValues(patientData), topContributors: [] }
   const clustering = analysisSnapshot.clustering ?? buildClusterSnapshot(patientData)
@@ -462,6 +466,36 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
     cellComposition,
     predictionSnapshot.pcosRiskScore,
   )
+
+  // Prepare render nodes for SHAP or human-readable reasoning to avoid complex inline JSX
+  const shapNodes = shap.values && shap.values.length > 0
+    ? shap.values.map((feature: any, index: number) => (
+        <motion.div key={feature.name + index} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55 + index * 0.05 }} className="flex items-center gap-4">
+          <span className="w-36 text-sm text-muted-foreground shrink-0">{feature.name}</span>
+          <div className="flex-1 flex items-center gap-2">
+            <div className="flex-1 h-6 bg-muted/30 rounded-full overflow-hidden">
+              <motion.div initial={{ width: 0 }} animate={{ width: `${feature.value * 100}%` }} transition={{ duration: 0.8, delay: 0.55 + index * 0.05 }} className={`h-full rounded-full ${feature.impact === "high" ? "bg-gradient-to-r from-pink-500 to-pink-400" : feature.impact === "moderate" ? "bg-gradient-to-r from-yellow-500 to-yellow-400" : "bg-gradient-to-r from-green-500 to-green-400"}`} />
+            </div>
+            <span className={`text-sm font-mono w-12 ${feature.impact === "high" ? "text-pink-400" : feature.impact === "moderate" ? "text-yellow-400" : "text-green-400"}`}>
+              {(feature.value * 100).toFixed(0)}%
+            </span>
+          </div>
+        </motion.div>
+      ))
+    : (
+      <div className="p-3 rounded-lg bg-muted/10 border border-border/50 text-sm text-muted-foreground">No SHAP feature contributions were returned by the backend.</div>
+    )
+
+  const humanReasoningNodes = humanReasoning && humanReasoning.length > 0
+    ? humanReasoning.map((line: string, index: number) => (
+        <motion.div key={index} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55 + index * 0.05 }} className="flex items-start gap-4">
+          <span className="w-36 text-sm text-muted-foreground shrink-0">{index + 1}.</span>
+          <div className="flex-1">
+            <div className="text-sm text-foreground">{line}</div>
+          </div>
+        </motion.div>
+      ))
+    : null
 
   const handleSaveResults = async () => {
     if (!sessionId) return
@@ -740,6 +774,16 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mb-8">
+          <Card className="glass border-purple-500/20 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-foreground">Body Visualization</h3>
+              <p className="text-sm text-muted-foreground">Clinical region highlights based on analysis</p>
+            </div>
+            <BodyVisualization patientData={patientData} highlights={bodyHighlights} />
+          </Card>
+        </motion.div>
+
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-8">
           <Card className="glass border-cyan-500/30 p-6">
             <div className="flex items-start gap-3 mb-6">
@@ -805,23 +849,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                 </div>
               </div>
               <div className="space-y-4">
-                {shap.values.length > 0 ? shap.values.map((feature, index) => (
-                  <motion.div key={feature.name} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55 + index * 0.05 }} className="flex items-center gap-4">
-                    <span className="w-36 text-sm text-muted-foreground shrink-0">{feature.name}</span>
-                    <div className="flex-1 flex items-center gap-2">
-                      <div className="flex-1 h-6 bg-muted/30 rounded-full overflow-hidden">
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${feature.value * 100}%` }} transition={{ duration: 0.8, delay: 0.55 + index * 0.05 }} className={`h-full rounded-full ${feature.impact === "high" ? "bg-gradient-to-r from-pink-500 to-pink-400" : feature.impact === "moderate" ? "bg-gradient-to-r from-yellow-500 to-yellow-400" : "bg-gradient-to-r from-green-500 to-green-400"}`} />
-                      </div>
-                      <span className={`text-sm font-mono w-12 ${feature.impact === "high" ? "text-pink-400" : feature.impact === "moderate" ? "text-yellow-400" : "text-green-400"}`}>
-                        {(feature.value * 100).toFixed(0)}%
-                      </span>
-                    </div>
-                  </motion.div>
-                )) : (
-                  <div className="p-3 rounded-lg bg-muted/10 border border-border/50 text-sm text-muted-foreground">
-                    No SHAP feature contributions were returned by the backend.
-                  </div>
-                )}
+                {humanReasoning && humanReasoning.length > 0 ? humanReasoningNodes : shapNodes}
               </div>
             </Card>
           </motion.div>
@@ -849,6 +877,19 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
                     <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
                     <span className="text-sm text-foreground">No additional recommendations returned.</span>
+                  </div>
+                )}
+                {suggestedInvestigationsList && suggestedInvestigationsList.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-sm font-semibold text-foreground mb-2">Suggested Next Investigations</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {suggestedInvestigationsList.map((inv: string, idx: number) => (
+                        <div key={inv + idx} className="flex items-start gap-2 p-2 rounded-lg bg-muted/10 border border-border text-sm">
+                          <span className="w-6 h-6 rounded-full bg-cyan-500/10 flex items-center justify-center text-xs text-cyan-300 mt-0.5">{idx + 1}</span>
+                          <span className="text-sm text-foreground">{inv}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
