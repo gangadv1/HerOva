@@ -10,8 +10,9 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap, Info } from "lucide-react"
 import type { PatientData } from "./patient-analysis"
-import { BodyVisualization } from "./body-visualization"
 import { healthApi, type FullAnalysisResult, type PredictionResult, type RotterdamEvaluation } from "@/lib/api"
+import { InteractiveBodyViewer } from "@/components/body-viewer/interactive-body-viewer"
+import { bodyViewerSymptoms, patientSymptomData, buildSymptomsForPatient } from "@/components/body-viewer/pcos-body-viewer-data"
 
 interface ResultsDashboardProps {
   patientData: PatientData
@@ -447,7 +448,6 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
   const analysisSnapshot = analysis ?? buildLocalAnalysis(patientData, predictionSnapshot)
   const humanReasoning = (analysisSnapshot as any).humanReasoning ?? []
   const suggestedInvestigationsList = (analysisSnapshot as any).suggestedInvestigations ?? (analysisSnapshot.nextInvestigations ?? [])
-  const bodyHighlights = (analysisSnapshot as any).bodyHighlights ?? {}
   const rotterdam = predictionSnapshot.rotterdamEvaluation
   const shap = analysisSnapshot.shap ?? { values: buildShapValues(patientData), topContributors: [] }
   const clustering = analysisSnapshot.clustering ?? buildClusterSnapshot(patientData)
@@ -466,6 +466,35 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
     cellComposition,
     predictionSnapshot.pcosRiskScore,
   )
+  const builtSymptoms = buildSymptomsForPatient(patientData, analysisSnapshot)
+  const severeFindings = builtSymptoms.filter((symptom) => symptom.severity === "severe").length
+  const affectedRegions = builtSymptoms.length
+
+  const primaryDiagnosisName = predictionSnapshot.phenotype.name
+  const primaryDiagnosisConfidence = Math.round(confidenceMetrics.pcosClassification || predictionSnapshot.pcosRiskScore || 0)
+  const primaryDiagnosisBadge = predictionSnapshot.riskLevel === "high" ? "High Confidence" : predictionSnapshot.riskLevel === "moderate" ? "Moderate Confidence" : "Low Confidence"
+
+  const criteriaMetPieces: string[] = []
+  if (rotterdam.hyperandrogenism.met) criteriaMetPieces.push("Hyperandrogenism")
+  if (rotterdam.ovulatoryDysfunction.met) criteriaMetPieces.push("Ovulatory dysfunction")
+  if (rotterdam.polycysticOvaries.met) criteriaMetPieces.push("Polycystic ovaries")
+  const criteriaMetText = criteriaMetPieces.length > 0 ? criteriaMetPieces.join(" + ") : "No Rotterdam criteria clearly met"
+
+  // Build symptom category counts from builtSymptoms
+  const categoryMap: Record<string, number> = { Reproductive: 0, Dermatological: 0, Metabolic: 0, Hormonal: 0 }
+  builtSymptoms.forEach((s) => {
+    if (s.region === "reproductive" || s.region === "pelvis") categoryMap.Reproductive += 1
+    else if (s.region === "face" || s.region === "scalp" || s.id === "hirsutism") categoryMap.Dermatological += 1
+    else if (s.region === "abdomen" || s.id === "skin-tags") categoryMap.Metabolic += 1
+    else categoryMap.Hormonal += 1
+  })
+
+  const symptomCategories = [
+    { name: "Reproductive", count: categoryMap.Reproductive, color: "bg-primary" },
+    { name: "Dermatological", count: categoryMap.Dermatological, color: "bg-accent" },
+    { name: "Metabolic", count: categoryMap.Metabolic, color: "bg-secondary" },
+    { name: "Hormonal", count: categoryMap.Hormonal, color: "bg-purple-500" },
+  ]
 
   // Prepare render nodes for SHAP or human-readable reasoning to avoid complex inline JSX
   const shapNodes = shap.values && shap.values.length > 0
@@ -678,6 +707,77 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }} className="mb-8">
+          <Card className="glass border-purple-500/20 p-6">
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-foreground">Body Visualization</h3>
+                <p className="text-sm text-muted-foreground">Interactive Symptom Mapping</p>
+              </div>
+              <Badge variant="outline" className="border-primary/30 text-primary">
+                <Activity className="h-3 w-3 mr-1" />
+                Live Analysis
+              </Badge>
+            </div>
+
+            <div className="grid lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2 min-w-0">
+                <InteractiveBodyViewer symptoms={builtSymptoms} />
+              </div>
+
+              <div className="space-y-6">
+                <Card className="glass rounded-2xl p-6 border border-border/50">
+                  <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Brain className="h-5 w-5 text-primary" />
+                    AI Analysis Summary
+                  </h2>
+
+                  <div className="space-y-4">
+                    <div className="p-3 rounded-xl bg-primary/10 border border-primary/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Primary Diagnosis</span>
+                        <Badge className="bg-primary/20 text-primary border-primary/30">{primaryDiagnosisBadge}</Badge>
+                      </div>
+                      <p className="text-lg font-bold text-primary">{primaryDiagnosisName}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{criteriaMetText}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3 rounded-xl bg-card border border-border">
+                        <span className="text-xs text-muted-foreground">Affected Regions</span>
+                        <p className="text-2xl font-bold text-secondary">{affectedRegions}</p>
+                      </div>
+                      <div className="p-3 rounded-xl bg-card border border-border">
+                        <span className="text-xs text-muted-foreground">Severe Findings</span>
+                        <p className="text-2xl font-bold text-accent">{severeFindings}</p>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="glass rounded-2xl p-6 border border-border/50">
+                  <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <Dna className="h-5 w-5 text-secondary" />
+                    Symptom Categories
+                  </h2>
+
+                  <div className="space-y-3">
+                    {symptomCategories.map((category) => (
+                      <div key={category.name} className="flex items-center justify-between p-3 rounded-xl bg-card/50 border border-border/50">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-3 h-3 rounded-full ${category.color}`} />
+                          <span className="text-sm font-medium">{category.name}</span>
+                        </div>
+                        <Badge variant="outline">{category.count} findings</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
         <div className="grid lg:grid-cols-2 gap-6 mb-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
             <Card className="glass border-cyan-500/30 p-6 h-full space-y-4">
@@ -773,16 +873,6 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
             </Card>
           </motion.div>
         </div>
-
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mb-8">
-          <Card className="glass border-purple-500/20 p-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-foreground">Body Visualization</h3>
-              <p className="text-sm text-muted-foreground">Clinical region highlights based on analysis</p>
-            </div>
-            <BodyVisualization patientData={patientData} highlights={bodyHighlights} />
-          </Card>
-        </motion.div>
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-8">
           <Card className="glass border-cyan-500/30 p-6">

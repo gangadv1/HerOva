@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import React, { useState, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import Logo from "@/components/branding/logo"
@@ -8,9 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { BodyVisualization } from "@/components/analysis/body-visualization"
-import { ArrowLeft, Upload, FileSpreadsheet, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Loader as Loader2, Download, Users, Activity, X } from "lucide-react"
+import { ArrowLeft, Upload, FileSpreadsheet, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Loader as Loader2, Download, Users, Activity, X, Brain, Info, TrendingUp } from "lucide-react"
 import { healthApi, type CSVUploadResult, type FullAnalysisResult } from "@/lib/api"
 import { toast } from "@/hooks/use-toast"
+import { ResultsDashboard } from "@/components/analysis/results-dashboard"
 
 type SelectedPatient = CSVUploadResult["patients"][number] | null
 
@@ -66,6 +67,44 @@ function buildBiologicalSummary(patientData: Record<string, unknown>, analysis: 
   const dominantPathway = buildPathwayInsights(patientData)[0]
   const phenotypeName = analysis.phenotype?.name || "Unknown phenotype"
   return `The leading biological signal is ${dominantPathway.name.toLowerCase()} at ${dominantPathway.activity}%, with phenotype assignment of ${phenotypeName}.`
+}
+
+class ErrorBoundary extends React.Component<any, { hasError: boolean; error: any }>{
+  constructor(props: any) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: any, info: any) {
+    // Log to console for diagnostics
+    // eslint-disable-next-line no-console
+    console.error("ErrorBoundary caught:", error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-6">
+          <h3 className="text-lg font-bold text-foreground mb-2">An error occurred rendering the patient details</h3>
+          <pre className="text-xs text-muted-foreground whitespace-pre-wrap">{String(this.state.error)}</pre>
+          <div className="mt-4">
+            <button
+              className="px-3 py-2 bg-red-500 text-white rounded"
+              onClick={() => location.reload()}
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      )
+    }
+
+    return this.props.children
+  }
 }
 
 function buildBatchDifferentialDiagnosis(analysis: FullAnalysisResult) {
@@ -227,6 +266,28 @@ export default function CSVUploadPage() {
     })
 
     const nextReferralRows = Array.from(new Set([...referredRows, patient.rowId]))
+
+    // Ensure there's a session to persist referral state. If not, create one locally (or via API).
+    if (!sessionId && result) {
+      try {
+        const session = await healthApi.session.create(
+          {
+            source: "batch-upload",
+            fileName: file?.name || "batch-upload.csv",
+            totalRows: result.summary.totalRows,
+            processedPatients: result.summary.processedPatients,
+            pcosPositive: result.summary.pcosPositive,
+          },
+          result
+        )
+
+        const savedSessionId = session.session?.id
+        if (savedSessionId) setSessionId(savedSessionId)
+      } catch {
+        // ignore; persistence is optional for UI referral behavior
+      }
+    }
+
     await persistReferralState(nextReferralRows)
 
     toast({
@@ -717,261 +778,13 @@ export default function CSVUploadPage() {
                       className="w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background shadow-2xl"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border/60 bg-background/95 px-6 py-4 backdrop-blur">
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-xl font-bold text-foreground">Patient #{selectedPatient.rowId}</h3>
-                            <Badge className={selectedAnalysis ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-500/20 text-slate-300 border-slate-500/30"} variant="outline">
-                              {selectedAnalysis ? "Analysis Complete" : "Analysis Not Generated"}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">Single Patient Analysis detail view from the batch upload overview.</p>
-                        </div>
-                        <Button variant="outline" onClick={closePatientDetails} className="border-border/60 text-foreground hover:bg-muted/20">
-                          <X className="h-4 w-4 mr-2" />
-                          Close
-                        </Button>
+                      {/* Error boundary to catch render errors inside the modal */}
+                      <ErrorBoundary>
+                      {/* Render full ResultsDashboard to mirror single-patient analysis layout */}
+                      <div>
+                        <ResultsDashboard patientData={selectedPatient.patientData as any} onBack={closePatientDetails} />
                       </div>
-
-                      <div className="grid gap-6 p-6 xl:grid-cols-[1.05fr_0.95fr]">
-                        <Card className="glass border-purple-500/20 p-6">
-                          <h4 className="mb-4 text-lg font-bold text-foreground">Diagnosis</h4>
-                          {selectedAnalysis ? (
-                            <div className="space-y-4">
-                              <div className="grid grid-cols-3 gap-3">
-                                <div className="rounded-xl border border-border/50 bg-muted/10 p-4">
-                                  <div className="text-xs text-muted-foreground">Risk Score</div>
-                                  <div className="text-3xl font-bold text-cyan-300">{selectedAnalysis.prediction.pcosRiskScore}%</div>
-                                </div>
-                                <div className="rounded-xl border border-border/50 bg-muted/10 p-4">
-                                  <div className="text-xs text-muted-foreground">Risk Level</div>
-                                  <div className="text-2xl font-bold text-foreground capitalize">{selectedAnalysis.prediction.riskLevel}</div>
-                                </div>
-                                <div className="rounded-xl border border-border/50 bg-muted/10 p-4">
-                                  <div className="text-xs text-muted-foreground">Criteria Met</div>
-                                  <div className="text-2xl font-bold text-foreground">{selectedAnalysis.rotterdamEvaluation.criteriaMetCount} / 3</div>
-                                </div>
-                              </div>
-                              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                                <div className="text-sm text-cyan-300">Diagnosis</div>
-                                <div className="text-lg font-semibold text-foreground">{selectedAnalysis.phenotype.name}</div>
-                                <p className="mt-2 text-sm text-muted-foreground">{selectedAnalysis.phenotype.description}</p>
-                              </div>
-                              <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                                <div className="text-sm font-semibold text-foreground mb-2">Phenotype</div>
-                                <p className="text-sm text-muted-foreground">Type {selectedAnalysis.phenotype.type}</p>
-                                <p className="text-sm text-muted-foreground mt-2">{selectedAnalysis.phenotypeDisplay?.characteristics?.join(" • ") || selectedAnalysis.prediction.contributingFactors.join(" • ")}</p>
-                              </div>
-                              <div className="rounded-2xl border border-border/50 bg-muted/10 p-4">
-                                <div className="text-sm font-semibold text-foreground mb-2">Analysis status</div>
-                                <p className="text-sm text-muted-foreground">Patient-specific diagnostics have already been generated for this entry.</p>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-4">
-                              <div className="rounded-2xl border border-slate-700/60 bg-slate-950/40 p-4">
-                                <div className="text-sm font-semibold text-foreground mb-2">Analysis Not Generated</div>
-                                <p className="text-sm text-muted-foreground">Generate the single-patient analysis to open the detailed diagnostic report for this patient.</p>
-                              </div>
-                              <Button onClick={() => generateSinglePatientAnalysis(selectedPatient)} disabled={selectedAnalysisLoading} className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white border-0">
-                                {selectedAnalysisLoading ? (
-                                  <>
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Generating...
-                                  </>
-                                ) : (
-                                  "Generate Single Patient Analysis"
-                                )}
-                              </Button>
-                            </div>
-                          )}
-                        </Card>
-
-                        <div className="space-y-6">
-                          {selectedAnalysis && (
-                            <>
-                              <Card className="glass border-cyan-500/20 p-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                  <Brain className="w-5 h-5 text-cyan-400" />
-                                  <div>
-                                    <h4 className="text-lg font-bold text-foreground">AI Confidence</h4>
-                                    <p className="text-sm text-muted-foreground">Model certainty and report quality</p>
-                                  </div>
-                                </div>
-                                <div className="space-y-4">
-                                  <div>
-                                    <div className="flex justify-between text-sm mb-1">
-                                      <span className="text-muted-foreground">PCOS Classification</span>
-                                      <span className="text-cyan-300">{selectedAnalysis.confidenceMetrics.pcosClassification}%</span>
-                                    </div>
-                                    <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
-                                      <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" style={{ width: `${selectedAnalysis.confidenceMetrics.pcosClassification}%` }} />
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="flex justify-between text-sm mb-1">
-                                      <span className="text-muted-foreground">Phenotype Match</span>
-                                      <span className="text-pink-300">{selectedAnalysis.confidenceMetrics.phenotypeMatch}%</span>
-                                    </div>
-                                    <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
-                                      <div className="h-full rounded-full bg-gradient-to-r from-pink-500 to-rose-500" style={{ width: `${selectedAnalysis.confidenceMetrics.phenotypeMatch}%` }} />
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div className="flex justify-between text-sm mb-1">
-                                      <span className="text-muted-foreground">Data Quality</span>
-                                      <span className="text-purple-300">{selectedAnalysis.confidenceMetrics.dataQuality}%</span>
-                                    </div>
-                                    <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
-                                      <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500" style={{ width: `${selectedAnalysis.confidenceMetrics.dataQuality}%` }} />
-                                    </div>
-                                  </div>
-                                </div>
-                              </Card>
-
-                              <Card className="glass border-pink-500/20 p-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                  <Info className="w-5 h-5 text-pink-400" />
-                                  <div>
-                                    <h4 className="text-lg font-bold text-foreground">Rotterdam Criteria Evaluation</h4>
-                                    <p className="text-sm text-muted-foreground">Patient-specific criterion status</p>
-                                  </div>
-                                </div>
-                                <div className="space-y-3">
-                                  {[
-                                    { label: "Hyperandrogenism", result: selectedAnalysis.rotterdamEvaluation.hyperandrogenism },
-                                    { label: "Ovulatory dysfunction", result: selectedAnalysis.rotterdamEvaluation.ovulatoryDysfunction },
-                                    { label: "Polycystic ovarian morphology", result: selectedAnalysis.rotterdamEvaluation.polycysticOvaries },
-                                  ].map((criterion) => (
-                                    <div key={criterion.label} className={`rounded-lg border p-3 ${criterion.result.met ? "bg-emerald-500/10 border-emerald-500/30" : "bg-slate-900/30 border-slate-700/40"}`}>
-                                      <div className="flex items-center justify-between gap-3 mb-2">
-                                        <div className="font-semibold text-foreground">{criterion.label}</div>
-                                        <Badge className={criterion.result.met ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-500/20 text-slate-300 border-slate-500/30"}>
-                                          {criterion.result.met ? "Met" : "Not met"}
-                                        </Badge>
-                                      </div>
-                                      <p className="text-sm text-muted-foreground mb-2">{criterion.result.reasoning}</p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </Card>
-
-                              <Card className="glass border-cyan-500/20 p-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                  <TrendingUp className="w-5 h-5 text-cyan-400" />
-                                  <div>
-                                    <h4 className="text-lg font-bold text-foreground">Differential Diagnosis</h4>
-                                    <p className="text-sm text-muted-foreground">Patient-specific probability distribution</p>
-                                  </div>
-                                </div>
-                                <div className="space-y-3">
-                                  {buildBatchDifferentialDiagnosis(selectedAnalysis).map((diagnosis) => (
-                                    <div key={diagnosis.condition} className="space-y-2 rounded-lg border border-border/50 bg-muted/10 p-3">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                                          <span className="text-lg">{diagnosis.icon}</span>
-                                          <div className="min-w-0">
-                                            <div className="font-semibold text-sm text-foreground truncate">{diagnosis.condition}</div>
-                                            <p className="text-xs text-muted-foreground line-clamp-2">{diagnosis.description}</p>
-                                          </div>
-                                        </div>
-                                        <span className="text-sm font-bold flex-shrink-0 w-12 text-right text-cyan-300">{diagnosis.probability}%</span>
-                                      </div>
-                                      <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                                        <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-teal-500" style={{ width: `${diagnosis.probability}%` }} />
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </Card>
-
-                              <Card className="glass border-cyan-500/20 p-6">
-                                <h4 className="mb-4 text-lg font-bold text-foreground">Pathway Insights</h4>
-                                <div className="space-y-3">
-                                  {buildPathwayInsights(selectedPatient.patientData).map((pathway) => (
-                                    <div key={pathway.name} className="rounded-xl border border-border/50 bg-muted/10 p-3">
-                                      <div className="flex items-start justify-between gap-3">
-                                        <div>
-                                          <div className="font-semibold text-foreground">{pathway.icon} {pathway.name}</div>
-                                          <p className="text-sm text-muted-foreground">{pathway.description}</p>
-                                        </div>
-                                        <div className="text-xl font-bold text-foreground">{pathway.activity}%</div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </Card>
-
-                              <Card className="glass border-pink-500/20 p-6">
-                                <h4 className="mb-4 text-lg font-bold text-foreground">Biological Insights</h4>
-                                <p className="text-sm text-muted-foreground">{buildBiologicalSummary(selectedPatient.patientData, selectedAnalysis)}</p>
-                                <div className="mt-4 space-y-2">
-                                  {selectedAnalysis.humanReasoning?.map((line) => (
-                                    <div key={line} className="rounded-xl border border-border/50 bg-muted/10 px-3 py-2 text-sm text-foreground">{line}</div>
-                                  ))}
-                                </div>
-                              </Card>
-
-                              <Card className="glass border-yellow-500/20 p-6">
-                                <div className="flex items-center gap-3 mb-4">
-                                  <Users className="w-5 h-5 text-yellow-400" />
-                                  <div>
-                                    <h4 className="text-lg font-bold text-foreground">Referral Priority Queue</h4>
-                                    <p className="text-sm text-muted-foreground">Operational next step from this patient report</p>
-                                  </div>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-3">
-                                  {referredRows.has(selectedPatient.rowId) ? (
-                                    <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30" variant="outline">Referred</Badge>
-                                  ) : null}
-                                  <Button
-                                    onClick={() => {
-                                      setReferredRows((current) => {
-                                        const next = new Set(current)
-                                        next.add(selectedPatient.rowId)
-                                        return next
-                                      })
-                                      void persistReferralState(Array.from(new Set([...referredRows, selectedPatient.rowId])))
-                                      toast({
-                                        title: "Referral sent",
-                                        description: `Patient #${selectedPatient.rowId} added to the referral queue.`,
-                                      })
-                                    }}
-                                    className="bg-yellow-500 text-slate-950 hover:bg-yellow-400"
-                                  >
-                                    Send to Referral Queue
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    onClick={() => generateSinglePatientAnalysis(selectedPatient)}
-                                    disabled={selectedAnalysisLoading}
-                                    className="border-yellow-500/30 text-yellow-200 hover:bg-yellow-500/10"
-                                  >
-                                    Refresh Analysis
-                                  </Button>
-                                </div>
-                              </Card>
-
-                              <Card className="glass border-purple-500/20 p-6">
-                                <h4 className="mb-4 text-lg font-bold text-foreground">Body Visualization</h4>
-                                <BodyVisualization patientData={selectedPatient.patientData} highlights={selectedAnalysis.bodyHighlights} />
-                              </Card>
-
-                              <Card className="glass border-cyan-500/20 p-6">
-                                <h4 className="mb-4 text-lg font-bold text-foreground">Suggested Next Investigations</h4>
-                                <div className="space-y-2">
-                                  {(selectedAnalysis.suggestedInvestigations || []).map((item, index) => (
-                                    <div key={item} className="flex items-start gap-3 rounded-xl border border-border/50 bg-muted/10 p-3">
-                                      <div className="w-6 h-6 rounded-full bg-cyan-500/10 flex items-center justify-center text-xs text-cyan-300 mt-0.5">{index + 1}</div>
-                                      <div className="text-sm text-foreground">{item}</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </Card>
-                            </>
-                          )}
-                        </div>
-                      </div>
+                      </ErrorBoundary>
                     </motion.div>
                   </motion.div>
                 )}

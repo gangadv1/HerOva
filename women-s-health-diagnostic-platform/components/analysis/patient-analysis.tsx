@@ -15,7 +15,6 @@ import { HormonalSymptomsForm } from "./forms/hormonal-symptoms-form"
 import { MetabolicIndicatorsForm } from "./forms/metabolic-indicators-form"
 import { UltrasoundForm } from "./forms/ultrasound-form"
 import { LabBiomarkersForm } from "./forms/lab-biomarkers-form"
-import { BodyVisualization } from "./body-visualization"
 import { ResultsDashboard } from "./results-dashboard"
 
 const steps = [
@@ -129,7 +128,6 @@ export function PatientAnalysis() {
   const [currentStep, setCurrentStep] = useState(0)
   const [patientData, setPatientData] = useState<PatientData>(initialPatientData)
   const [showResults, setShowResults] = useState(false)
-  const [showBodyView, setShowBodyView] = useState(false)
 
   const activeSteps = steps
   const progress = ((currentStep + 1) / activeSteps.length) * 100
@@ -186,14 +184,6 @@ export function PatientAnalysis() {
               <span className="text-sm text-muted-foreground">Remote consultation summary</span>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowBodyView(!showBodyView)}
-              className="border-purple-500/50 text-foreground hover:bg-purple-500/10"
-            >
-              {showBodyView ? "Form View" : "Body View"}
-            </Button>
           </div>
         </div>
       </header>
@@ -236,37 +226,25 @@ export function PatientAnalysis() {
 
         {/* Main content */}
         <AnimatePresence mode="wait">
-          {showBodyView ? (
-            <motion.div
-              key="body-view"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-            >
-              <BodyVisualization patientData={patientData} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key={`form-${currentStep}`}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-              className="max-w-4xl mx-auto"
-            >
-              <Card className="glass border-purple-500/20 p-8">
-                <h2 className="text-xl font-bold text-foreground mb-6 flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm">
-                    {currentStep + 1}
-                  </span>
-                  {steps[currentStep].title}
-                </h2>
-                
-                <CurrentForm data={patientData} updateData={updatePatientData} />
-              </Card>
-            </motion.div>
-          )}
+          <motion.div
+            key={`form-${currentStep}`}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="max-w-4xl mx-auto"
+          >
+            <Card className="glass border-purple-500/20 p-8">
+              <h2 className="text-xl font-bold text-foreground mb-6 flex items-center gap-3">
+                <span className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm">
+                  {currentStep + 1}
+                </span>
+                {steps[currentStep].title}
+              </h2>
+
+              <CurrentForm data={patientData} updateData={updatePatientData} />
+            </Card>
+          </motion.div>
         </AnimatePresence>
 
         {/* Navigation */}

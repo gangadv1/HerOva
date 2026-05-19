@@ -11,131 +11,7 @@ import {
   InteractiveBodyViewer,
   type SymptomHotspot,
 } from "@/components/body-viewer/interactive-body-viewer";
-
-interface SymptomData {
-  id: string;
-  name: string;
-  region: string;
-  description: string;
-  severity: "mild" | "moderate" | "severe";
-  symptoms: string[];
-}
-
-// Patient-specific symptom data based on PCOS diagnosis
-const patientSymptomData: SymptomData[] = [
-  {
-    id: "scalp",
-    name: "Scalp & Hair",
-    region: "head",
-    description: "Androgenic alopecia - Hair thinning at the crown and temples due to elevated DHT levels. Pattern consistent with hyperandrogenism.",
-    severity: "moderate",
-    symptoms: ["Diffuse hair thinning", "Receding hairline", "Increased shedding", "Oily scalp"],
-  },
-  {
-    id: "face-acne",
-    name: "Facial Acne",
-    region: "face",
-    description: "Hormonal acne concentrated along the jawline and chin - classic pattern associated with elevated androgens in PCOS.",
-    severity: "moderate",
-    symptoms: ["Cystic acne", "Inflammatory lesions", "Jawline breakouts", "Chin acne"],
-  },
-  {
-    id: "hirsutism",
-    name: "Hirsutism",
-    region: "face",
-    description: "Excess terminal hair growth in androgen-dependent areas. Ferriman-Gallwey score indicates moderate hirsutism.",
-    severity: "mild",
-    symptoms: ["Upper lip hair", "Chin hair", "Sideburn area", "Chest hair"],
-  },
-  {
-    id: "thyroid",
-    name: "Thyroid",
-    region: "neck",
-    description: "TSH levels within normal range but monitoring recommended. Thyroid dysfunction commonly co-occurs with PCOS.",
-    severity: "mild",
-    symptoms: ["Fatigue", "Cold intolerance", "Dry skin"],
-  },
-  {
-    id: "abdomen",
-    name: "Central Adiposity",
-    region: "abdomen",
-    description: "Visceral fat accumulation indicative of insulin resistance. Waist-to-hip ratio elevated. Key metabolic marker for PCOS.",
-    severity: "moderate",
-    symptoms: ["Abdominal weight gain", "Bloating", "Difficulty losing weight", "Insulin resistance markers"],
-  },
-  {
-    id: "ovary-left",
-    name: "Left Ovary",
-    region: "reproductive",
-    description: "Polycystic morphology confirmed via ultrasound. Volume: 12.3 mL. Antral follicle count: 14. Multiple peripheral follicles in 'string of pearls' pattern.",
-    severity: "severe",
-    symptoms: ["Multiple small follicles (2-9mm)", "Enlarged ovarian volume", "Peripheral follicle distribution", "Increased stromal echogenicity"],
-  },
-  {
-    id: "ovary-right",
-    name: "Right Ovary",
-    region: "reproductive",
-    description: "Polycystic morphology confirmed via ultrasound. Volume: 11.8 mL. Antral follicle count: 12. Evidence of anovulation.",
-    severity: "severe",
-    symptoms: ["Multiple small follicles (2-9mm)", "Enlarged ovarian volume", "Absent dominant follicle", "Thickened ovarian capsule"],
-  },
-  {
-    id: "uterus",
-    name: "Uterus",
-    region: "reproductive",
-    description: "Endometrial thickness: 8mm. Some irregularity noted. Prolonged anovulation may lead to endometrial hyperplasia - monitoring recommended.",
-    severity: "moderate",
-    symptoms: ["Irregular periods", "Heavy menstrual bleeding", "Prolonged cycles", "Amenorrhea episodes"],
-  },
-  {
-    id: "pelvic",
-    name: "Pelvic Region",
-    region: "pelvis",
-    description: "Chronic pelvic discomfort reported. May be related to ovarian enlargement or concurrent endometriosis.",
-    severity: "mild",
-    symptoms: ["Dull pelvic ache", "Discomfort during ovulation", "Lower back pain"],
-  },
-  {
-    id: "skin-tags",
-    name: "Acanthosis Nigricans",
-    region: "neck-skin",
-    description: "Darkened, velvety skin patches in neck folds and underarms - classic sign of insulin resistance and hyperinsulinemia.",
-    severity: "moderate",
-    symptoms: ["Dark skin patches", "Velvety texture", "Neck folds affected", "Axillary involvement"],
-  },
-];
-
-const bodyViewerCoordinates: Record<
-  string,
-  Pick<SymptomHotspot, "x" | "y" | "zoomArea" | "region">
-> = {
-  scalp: { x: 200, y: 45, region: "scalp", zoomArea: { x: 200, y: 80, scale: 3 } },
-  "face-acne": { x: 200, y: 95, region: "face", zoomArea: { x: 200, y: 100, scale: 3.5 } },
-  hirsutism: { x: 190, y: 105, region: "face", zoomArea: { x: 190, y: 105, scale: 3.5 } },
-  thyroid: { x: 200, y: 155, region: "neck", zoomArea: { x: 200, y: 160, scale: 3 } },
-  abdomen: { x: 200, y: 320, region: "abdomen", zoomArea: { x: 200, y: 320, scale: 2.5 } },
-  "ovary-left": { x: 160, y: 390, region: "reproductive", zoomArea: { x: 170, y: 400, scale: 3.5 } },
-  "ovary-right": { x: 240, y: 390, region: "reproductive", zoomArea: { x: 230, y: 400, scale: 3.5 } },
-  uterus: { x: 200, y: 420, region: "reproductive", zoomArea: { x: 200, y: 420, scale: 3.2 } },
-  pelvic: { x: 200, y: 455, region: "pelvis", zoomArea: { x: 200, y: 455, scale: 2.8 } },
-  "skin-tags": { x: 220, y: 165, region: "neck", zoomArea: { x: 220, y: 165, scale: 3 } },
-};
-
-const bodyViewerSymptoms: SymptomHotspot[] = patientSymptomData.map((symptom) => {
-  const coordinates = bodyViewerCoordinates[symptom.id];
-
-  return {
-    id: symptom.id,
-    name: symptom.name,
-    region: coordinates.region,
-    x: coordinates.x,
-    y: coordinates.y,
-    severity: symptom.severity,
-    description: symptom.description,
-    relatedSymptoms: symptom.symptoms,
-    zoomArea: coordinates.zoomArea,
-  };
-});
+import { bodyViewerSymptoms, patientSymptomData, buildSymptomsForPatient } from "@/components/body-viewer/pcos-body-viewer-data";
 
 export default function BodyVisualizationPage() {
   const [selectedSymptom, setSelectedSymptom] = useState<SymptomHotspot | null>(null);
@@ -187,7 +63,7 @@ export default function BodyVisualizationPage() {
               className="h-[700px]"
             >
               <InteractiveBodyViewer
-                symptoms={bodyViewerSymptoms}
+                symptoms={buildSymptomsForPatient(null, null)}
                 onSymptomSelect={setSelectedSymptom}
               />
             </motion.div>
