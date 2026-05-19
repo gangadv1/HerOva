@@ -1,0 +1,8 @@
+Model,High Risk Count,Δ from 175,CV Acc†,CV Prec†,CV Rec†,CV F1†,Notes
+Rule-Based (threshold≥70),128,-47,—,—,—,—,Deterministic; current production threshold
+Rule-Based (threshold≥62),175,0,—,—,—,—,Threshold recalibrated to match reference; same formula
+Logistic Regression,196,21,0.876,0.784,0.851,0.816,5-fold CV vs threshold-62 pseudo-labels
+Random Forest,175,0,0.889,0.886,0.754,0.815,5-fold CV vs threshold-62 pseudo-labels
+Gradient Boosting,175,0,0.896,0.848,0.829,0.838,5-fold CV vs threshold-62 pseudo-labels
+Decision Tree,209,34,0.852,0.717,0.897,0.797,5-fold CV vs threshold-62 pseudo-labels
+K-Nearest Neighbors,175,0,0.848,0.872,0.623,0.727,5-fold CV vs threshold-62 pseudo-labels
