@@ -3,6 +3,7 @@
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Slider } from "@/components/ui/slider"
+import { TestTubes } from "lucide-react"
 import type { PatientData } from "../patient-analysis"
 
 interface FormProps {
@@ -13,6 +14,13 @@ interface FormProps {
 export function LabBiomarkersForm({ data, updateData }: FormProps) {
   return (
     <div className="grid gap-6">
+      {/* Optional step notice */}
+      <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-300">
+        <TestTubes className="w-4 h-4 mt-0.5 flex-shrink-0" />
+        <span>
+          <strong>Optional — </strong>enter lab results if available. Hormone panels (LH, FSH, testosterone, AMH) strengthen phenotype accuracy but are not required. Leave defaults if lab data is unavailable; TSH and prolactin are used for differential exclusion and are also optional.
+        </span>
+      </div>
       {/* LH & FSH */}
       <div className="grid md:grid-cols-3 gap-6">
         <div className="space-y-2">

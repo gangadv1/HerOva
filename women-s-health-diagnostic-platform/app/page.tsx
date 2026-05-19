@@ -8,6 +8,10 @@ import { CTASection } from "@/components/landing/cta-section"
 import { Navigation } from "@/components/landing/navigation"
 import { ParticleBackground } from "@/components/landing/particle-background"
 import { FlyingButterflies } from "@/components/landing/flying-butterflies"
+import HomeSections from "@/components/landing/home-sections"
+import PublicHealthSection from "@/components/landing/public-health-section"
+import { InnovationSection } from "@/components/landing/innovation-section"
+import { EarlyAwarenessSection } from "@/components/landing/early-awareness-section"
 import { Card } from "@/components/ui/card"
 
 export default function Home() {
@@ -25,11 +29,19 @@ export default function Home() {
 
       <ProblemSection />
 
+      <InnovationSection />
+
       <FeaturesSection />
 
       <DatasetSection />
 
       <TechnologySection />
+
+      <HomeSections />
+
+      <PublicHealthSection />
+
+      <EarlyAwarenessSection />
 
       <section className="max-w-7xl mx-auto px-6 py-20 space-y-8">
         <div className="text-center max-w-3xl mx-auto mb-4">
