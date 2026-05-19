@@ -451,7 +451,7 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
     score += 12;
     factors.push("Elevated AMH");
   }
-  if (patient.lhFshRatio >= 2 || (patient.lh > 0 && patient.fsh / patient.lh >= 2)) {
+  if (patient.lhFshRatio >= 2) {
     score += 12;
     factors.push("Elevated FSH:LH ratio");
   }
@@ -459,7 +459,7 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
     score += 18;
     factors.push("Polycystic ovarian morphology");
   }
-  if (patient.bmi >= 25 || patient.weight > 0 && patient.weight / ((patient.height / 100) ** 2) >= 25) {
+  if (patient.bmi >= 25) {
     score += 10;
     factors.push("Elevated BMI");
   }
@@ -479,7 +479,7 @@ function calculateLocalRisk(patient: ReturnType<typeof buildPatientFromUploadedR
     score += 5;
     factors.push("Low physical activity");
   }
-  if (patient.tsh > 4.5 || patient.prolactin > 25 || patient.vitD3 > 0 && patient.vitD3 < 20) {
+  if (patient.tsh > 4.5 || patient.prolactin > 25 || (patient.vitD3 > 0 && patient.vitD3 < 20)) {
     score += 5;
     factors.push("Hormonal or metabolic imbalance");
   }
