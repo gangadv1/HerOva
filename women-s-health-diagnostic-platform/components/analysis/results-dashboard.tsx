@@ -652,8 +652,8 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                   <span className="mt-1 w-2 h-2 rounded-full flex-shrink-0 bg-cyan-400" />
                   <span className="text-foreground">
                     <strong>Rotterdam criteria:</strong>{" "}
-                    {predictionSnapshot.rotterdamEvaluation.criteriaMetCount}/3 criteria met.{" "}
-                    {predictionSnapshot.rotterdamEvaluation.diagnosisMet
+                    {rotterdam?.criteriaMetCount ?? 0}/3 criteria met.{" "}
+                    {rotterdam?.diagnosisMet
                       ? "PCOS diagnosis is supported."
                       : "Insufficient criteria for a Rotterdam diagnosis — probabilistic assessment only."}
                   </span>
