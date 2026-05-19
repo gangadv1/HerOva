@@ -8,13 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap } from "lucide-react"
+import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap, Info } from "lucide-react"
 import type { PatientData } from "./patient-analysis"
 import { healthApi, type FullAnalysisResult } from "@/lib/api"
-import { RotterdamCriteria } from "./rotterdam-criteria"
-import { DifferentialDiagnosis } from "./differential-diagnosis"
-import { FeatureImportance } from "./feature-importance"
-import { BiologicalInsights } from "./biological-insights"
 
 interface ResultsDashboardProps {
   patientData: PatientData
@@ -255,46 +251,77 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
-        {/* CLINICAL FOUNDATION: Rotterdam Criteria */}
-        {analysis.Rotterdam && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mb-8">
-            <RotterdamCriteria
-              hyperandrogenism={analysis.Rotterdam.hyperandrogenism ?? false}
-              ovulatoryDysfunction={analysis.Rotterdam.ovulatoryDysfunction ?? false}
-              polycysticOvaries={analysis.Rotterdam.polycysticOvaries ?? false}
-            />
-          </motion.div>
-        )}
+        {/* CLINICAL FOUNDATION & ANALYSIS SUMMARY */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mb-8">
+          <Card className="glass border-cyan-500/30 p-6 space-y-6">
+            <div className="flex items-start gap-3">
+              <Info className="w-5 h-5 text-cyan-400 mt-1 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-foreground mb-4">Clinical Analysis Summary</h3>
+                
+                <div className="space-y-4">
+                  {/* Rotterdam Criteria Brief */}
+                  <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                    <div className="font-semibold text-purple-400 mb-2">Rotterdam Criteria Evaluation</div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      PCOS diagnosis is based on the Rotterdam 2012 criteria requiring ≥2 of 3: hyperandrogenism (elevated androgens or clinical signs), ovulatory dysfunction (irregular cycles), and polycystic ovarian morphology (≥12 follicles per ovary or volume {'>'}10 mL on ultrasound).
+                    </p>
+                    {analysis.Rotterdam && (
+                      <div className="text-xs text-foreground">
+                        ✓ Your results show <strong>{[analysis.Rotterdam.hyperandrogenism, analysis.Rotterdam.ovulatoryDysfunction, analysis.Rotterdam.polycysticOvaries].filter(Boolean).length}/3 criteria met</strong>
+                      </div>
+                    )}
+                  </div>
 
-        {/* DIFFERENTIAL DIAGNOSIS: Competing Conditions */}
-        {analysis.Rotterdam && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="mb-8">
-            <DifferentialDiagnosis />
-          </motion.div>
-        )}
+                  {/* Differential Diagnosis Brief */}
+                  <div className="p-4 rounded-lg bg-pink-500/10 border border-pink-500/30">
+                    <div className="font-semibold text-pink-400 mb-2">Differential Diagnosis Analysis</div>
+                    <p className="text-sm text-muted-foreground">
+                      Beyond PCOS, this analysis considers other reproductive endocrine conditions including endometriosis, thyroid dysfunction, hyperprolactinemia, and Cushing's syndrome that may present with similar symptoms.
+                    </p>
+                  </div>
 
-        {/* SHAP FEATURE IMPORTANCE: Explainability */}
-        {shap.values && shap.values.length > 0 && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-8">
-            <FeatureImportance />
-          </motion.div>
-        )}
+                  {/* Feature Importance Brief */}
+                  <div className="p-4 rounded-lg bg-teal-500/10 border border-teal-500/30">
+                    <div className="font-semibold text-teal-400 mb-2">SHAP Feature Importance</div>
+                    <p className="text-sm text-muted-foreground">
+                      Machine learning explainability analysis identifies which clinical factors (cycle length, follicle count, hormone ratios, etc.) most strongly influence the PCOS risk score. Cycle length and follicle count typically have the highest impact.
+                    </p>
+                  </div>
 
-        {/* BIOLOGICAL INSIGHTS: Phenotype & Molecular Pathways */}
-        {phenotype && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }} className="mb-8">
-            <BiologicalInsights
-              phenotype={phenotype.type}
-              subtypeLabel={
-                prediction.riskLevel === "high"
-                  ? "Insulin-Resistant Metabolic Phenotype"
-                  : prediction.riskLevel === "moderate"
-                    ? "Mixed Metabolic Phenotype"
-                    : "Lean PCOS Phenotype"
-              }
-            />
-          </motion.div>
-        )}
+                  {/* Phenotype Classification Brief */}
+                  <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
+                    <div className="font-semibold text-cyan-400 mb-2">Phenotype Classification</div>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      PCOS is heterogeneous with 4 phenotypes: Type A (classic with PCO), Type B (HA+OD no PCO), Type C (OD+PCO no HA), and Type D (lean normo-androgenic). Metabolic subtype may be insulin-resistant, mixed, or lean depending on metabolic parameters.
+                    </p>
+                    {phenotype && (
+                      <div className="text-xs text-foreground">
+                        Your phenotype: <strong>{phenotype.type} - {phenotype.name}</strong>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Molecular Pathways Brief */}
+                  <div className="p-4 rounded-lg bg-pink-500/10 border border-pink-500/30">
+                    <div className="font-semibold text-pink-400 mb-2">Molecular Pathways & Biological Mechanisms</div>
+                    <p className="text-sm text-muted-foreground">
+                      PCOS involves dysregulation of 4 key pathways: chronic low-grade inflammation (IL-6, TNF-α, CRP), insulin signaling (INSR, IRS-1, PI3K, AKT), androgen synthesis (CYP17A1, CYP11A1), and ovarian dysfunction (AMH, FSHR, LHCGR). Insulin resistance is often central to pathogenesis.
+                    </p>
+                  </div>
+
+                  {/* Ovarian Cellular Architecture Brief */}
+                  <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
+                    <div className="font-semibold text-cyan-400 mb-2">Ovarian Cellular Architecture</div>
+                    <p className="text-sm text-muted-foreground">
+                      PCOS is characterized by abnormal ovarian cell populations with increased stromal volume (fibroblast-like cells), elevated immune infiltration, altered granulosa cell function, and theca cell hyperplasia driving androgen excess. Single-cell analysis reveals distinct cell type dysregulation patterns.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
 
         {/* Cluster Assignment */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }} className="mb-8">
