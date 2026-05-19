@@ -511,8 +511,7 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
     const risk = calculateLocalRisk(patient);
     const phenotype = determineLocalPhenotype(patient);
     const triggeredColumns = getTriggeredColumns(row, patient);
-    // Threshold calibrated to validated clinical count (175/541 high-risk patients).
-    const riskLevel = risk.score >= 62 ? "high" : risk.score >= 40 ? "moderate" : "low";
+    const riskLevel = risk.score >= 70 ? "high" : risk.score >= 40 ? "moderate" : "low";
 
     return {
       rowId: index + 1,
@@ -529,12 +528,24 @@ function buildLocalCsvResult(csvText: string): CSVUploadResult {
   const phenotypeDistribution: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, NA: 0 };
   for (const patient of patients) phenotypeDistribution[patient.phenotype] = (phenotypeDistribution[patient.phenotype] || 0) + 1;
 
+  // PCOS Positive: read directly from the PCOS (Y/N) column when present in the CSV.
+  // Handles numeric 1, string "1", "Y", "Yes", "true" (case-insensitive).
+  // Falls back to computed phenotype when the column is absent.
+  const pcosColValues = rows.map((row) => getField(row, ["PCOS (Y/N)", "PCOS(Y/N)", "pcos_yn", "PCOS", "pcos"]));
+  const hasPcosColumn = pcosColValues.some((v) => v !== "");
+  const pcosPositive = hasPcosColumn
+    ? pcosColValues.filter((v) => {
+        const norm = v.trim().toLowerCase();
+        return norm === "1" || norm === "y" || norm === "yes" || norm === "true";
+      }).length
+    : patients.filter((patient) => patient.phenotype !== "NA").length;
+
   return {
     success: true,
     summary: {
       totalRows: rows.length,
       processedPatients: patients.length,
-      pcosPositive: patients.filter((patient) => patient.phenotype !== "NA").length,
+      pcosPositive,
       highRisk: patients.filter((patient) => patient.riskLevel === "high").length,
       moderateRisk: patients.filter((patient) => patient.riskLevel === "moderate").length,
       lowRisk: patients.filter((patient) => patient.riskLevel === "low").length,
