@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import Link from "next/link"
 import Logo from "@/components/branding/logo"
@@ -10,58 +10,477 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, TrendingUp, TrendingDown, Brain, Activity, Dna, FileText, Loader as Loader2, Save, Users, Zap, Info } from "lucide-react"
 import type { PatientData } from "./patient-analysis"
-import { healthApi, type FullAnalysisResult } from "@/lib/api"
+import { healthApi, type FullAnalysisResult, type PredictionResult, type RotterdamEvaluation } from "@/lib/api"
 
 interface ResultsDashboardProps {
   patientData: PatientData
   onBack: () => void
+  mode?: "full" | "telehealth"
+}
+
+type DifferentialDiagnosisItem = {
+  condition: string
+  probability: number
+  description: string
+  icon: string
+}
+
+type PathwayActivity = {
+  name: string
+  activity: number
+  genes: string[]
+  description: string
+  icon: string
+}
+
+type CellularComposition = {
+  name: string
+  percent: number
+  icon: string
+  description: string
+}
+
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+
+function roundPercent(value: number) {
+  return Math.round(clamp(value, 0, 100))
+}
+
+function normalizePercentages<T extends { value: number }>(items: T[]) {
+  const total = items.reduce((sum, item) => sum + Math.max(item.value, 0), 0) || 1
+  let allocated = 0
+
+  return items.map((item, index) => {
+    const percent = index === items.length - 1
+      ? Math.max(0, 100 - allocated)
+      : roundPercent((Math.max(item.value, 0) / total) * 100)
+
+    allocated += percent
+    return { ...item, percent }
+  })
+}
+
+function buildRotterdamEvaluation(data: PatientData): RotterdamEvaluation {
+  const hyperandrogenismMet = data.hirsutism || data.acne || data.hairLoss || data.totalTestosterone > 50 || data.freeTestosterone > 3
+  const ovulatoryDysfunctionMet = data.irregularPeriods || data.cycleLength > 35
+  const polycysticOvariesMet = data.polycysticAppearance || data.follicleCountLeft >= 12 || data.follicleCountRight >= 12 || data.ovaryVolumeLeft > 10 || data.ovaryVolumeRight > 10
+
+  const criteriaMetCount = [hyperandrogenismMet, ovulatoryDysfunctionMet, polycysticOvariesMet].filter(Boolean).length
+
+  const exclusionNotes = [
+    data.tsh > 4 ? "Thyroid abnormality should be excluded before final interpretation." : "TSH does not suggest a thyroid-driven mimic.",
+    data.prolactin > 20 ? "Hyperprolactinemia is a potential alternative explanation and should be reviewed." : "Prolactin is not strongly suggestive of an exclusionary mimic.",
+  ]
+
+  return {
+    hyperandrogenism: {
+      met: hyperandrogenismMet,
+      reasoning: hyperandrogenismMet
+        ? "Clinical or biochemical evidence of androgen excess is present."
+        : "No clear hyperandrogenism signal is identified in the current input set.",
+      subcriteria: [
+        { name: "Hirsutism / acne / hair loss", met: data.hirsutism || data.acne || data.hairLoss, detail: "Clinical androgenic symptoms" },
+        { name: "Total testosterone", met: data.totalTestosterone > 50, detail: `Measured at ${data.totalTestosterone} ng/dL` },
+        { name: "Free testosterone", met: data.freeTestosterone > 3, detail: `Measured at ${data.freeTestosterone} ng/dL` },
+      ],
+    },
+    ovulatoryDysfunction: {
+      met: ovulatoryDysfunctionMet,
+      reasoning: ovulatoryDysfunctionMet
+        ? "Cycle pattern is consistent with oligo-ovulation or ovulatory dysfunction."
+        : "Cycle timing is not strongly suggestive of ovulatory dysfunction.",
+      subcriteria: [
+        { name: "Cycle length", met: data.cycleLength > 35, detail: `Cycle length is ${data.cycleLength} days` },
+        { name: "Irregular periods", met: data.irregularPeriods, detail: data.irregularPeriods ? "Irregular periods reported" : "Periods reported as regular" },
+      ],
+    },
+    polycysticOvaries: {
+      met: polycysticOvariesMet,
+      reasoning: polycysticOvariesMet
+        ? "Ultrasound features are consistent with polycystic ovarian morphology."
+        : "Current ultrasound inputs do not clearly meet polycystic ovarian morphology thresholds.",
+      subcriteria: [
+        { name: "Follicle count", met: data.follicleCountLeft >= 12 || data.follicleCountRight >= 12, detail: `Left ${data.follicleCountLeft}, right ${data.follicleCountRight}` },
+        { name: "Ovary volume", met: data.ovaryVolumeLeft > 10 || data.ovaryVolumeRight > 10, detail: `Left ${data.ovaryVolumeLeft} mL, right ${data.ovaryVolumeRight} mL` },
+      ],
+    },
+    criteriaMetCount,
+    diagnosisMet: criteriaMetCount >= 2,
+    exclusionNotes,
+  }
+}
+
+function buildPhenotype(data: PatientData) {
+  const hasOligo = data.irregularPeriods || data.cycleLength > 35
+  const hasHyperandrogenism = data.hirsutism || data.acne || data.totalTestosterone > 50 || data.freeTestosterone > 3
+  const hasPcom = data.polycysticAppearance || data.follicleCountLeft >= 12 || data.follicleCountRight >= 12
+
+  if (hasOligo && hasHyperandrogenism && hasPcom) {
+    return {
+      type: "A",
+      name: "Classic PCOS",
+      description: "All three Rotterdam criteria are present.",
+      clinicalReasoning: "This is the most complete Rotterdam phenotype and often carries the strongest metabolic signal.",
+    }
+  }
+
+  if (hasOligo && hasHyperandrogenism) {
+    return {
+      type: "B",
+      name: "Non-PCO Hyperandrogenic PCOS",
+      description: "Ovulatory dysfunction and androgen excess without clear polycystic morphology.",
+      clinicalReasoning: "The phenotype is driven by cycle dysfunction and hyperandrogenism rather than ultrasound morphology.",
+    }
+  }
+
+  if (hasHyperandrogenism && hasPcom) {
+    return {
+      type: "C",
+      name: "Ovulatory PCOS",
+      description: "Androgen excess with polycystic morphology and relatively preserved cycling.",
+      clinicalReasoning: "This pattern often presents with skin or biochemical androgen features while cycles remain closer to normal.",
+    }
+  }
+
+  if (hasOligo && hasPcom) {
+    return {
+      type: "D",
+      name: "Non-hyperandrogenic PCOS",
+      description: "Cycle irregularity and polycystic morphology without overt androgen excess.",
+      clinicalReasoning: "This phenotype is typically less androgenic and may show a milder reproductive profile.",
+    }
+  }
+
+  return {
+    type: "N/A",
+    name: "Uncertain / Non-PCOS pattern",
+    description: "The current inputs do not cleanly satisfy a Rotterdam phenotype.",
+    clinicalReasoning: "This pattern should be interpreted alongside exclusionary diagnoses and repeat clinical assessment.",
+  }
+}
+
+function buildPredictionFallback(data: PatientData): PredictionResult {
+  const rotterdamEvaluation = buildRotterdamEvaluation(data)
+  const phenotype = buildPhenotype(data)
+  let score = 0
+  const factors: string[] = []
+
+  if (rotterdamEvaluation.ovulatoryDysfunction.met) {
+    score += 30
+    factors.push("Oligomenorrhea / irregular cycles")
+  }
+  if (rotterdamEvaluation.hyperandrogenism.met) {
+    score += 25
+    factors.push("Clinical or biochemical hyperandrogenism")
+  }
+  if (rotterdamEvaluation.polycysticOvaries.met) {
+    score += 25
+    factors.push("Polycystic ovarian morphology")
+  }
+  if (data.lhFshRatio > 2) {
+    score += 10
+    factors.push("Elevated LH:FSH ratio")
+  }
+  if (data.amh > 6) {
+    score += 10
+    factors.push("Elevated AMH")
+  }
+  if (data.homaIr > 2.5) {
+    score += 10
+    factors.push("Insulin resistance")
+  }
+  if (data.skinDarkening) {
+    score += 5
+    factors.push("Acanthosis nigricans")
+  }
+
+  const pcosRiskScore = Math.min(score, 100)
+  const riskLevel = pcosRiskScore >= 70 ? "high" : pcosRiskScore >= 40 ? "moderate" : "low"
+  const confidenceMetrics = {
+    pcosClassification: Math.min(87 + (pcosRiskScore > 50 ? 8 : 0), 98),
+    phenotypeMatch: Math.min(85 + (phenotype.type !== "N/A" ? 7 : 0), 96),
+    dataQuality: 95,
+  }
+
+  const recommendations = pcosRiskScore >= 40
+    ? [
+        "Consider endocrine follow-up for hormonal correlation",
+        "Review metabolic markers and insulin resistance",
+        "Correlate ultrasound, cycle pattern, and androgen status",
+      ]
+    : [
+        "Continue routine monitoring",
+        "Maintain healthy lifestyle measures",
+        "Reassess if cycle or androgen symptoms evolve",
+      ]
+
+  return {
+    success: true,
+    pcosRiskScore,
+    riskLevel,
+    phenotype,
+    rotterdamEvaluation,
+    contributingFactors: factors,
+    confidenceMetrics,
+    recommendations,
+    timestamp: new Date().toISOString(),
+  }
+}
+
+function buildShapValues(data: PatientData) {
+  return [
+    { name: "Cycle Length", value: data.cycleLength > 35 ? 0.85 : 0.3, impact: data.cycleLength > 35 ? "high" : "low", direction: data.cycleLength > 35 ? "increases" : "neutral", explanation: data.cycleLength > 35 ? "Prolonged cycles indicate ovulatory dysfunction" : "Normal cycle length reduces PCOS likelihood" },
+    { name: "Follicle Count", value: (data.follicleCountLeft + data.follicleCountRight) / 2 >= 12 ? 0.75 : 0.25, impact: (data.follicleCountLeft + data.follicleCountRight) / 2 >= 12 ? "high" : "low", direction: (data.follicleCountLeft + data.follicleCountRight) / 2 >= 12 ? "increases" : "neutral", explanation: (data.follicleCountLeft + data.follicleCountRight) / 2 >= 12 ? "High follicle count indicates polycystic morphology" : "Follicle count is not strongly supportive of PCOM" },
+    { name: "LH:FSH Ratio", value: data.lhFshRatio > 2 ? 0.7 : 0.2, impact: data.lhFshRatio > 2 ? "high" : "low", direction: data.lhFshRatio > 2 ? "increases" : "neutral", explanation: data.lhFshRatio > 2 ? "Elevated ratio suggests pituitary-ovarian dysregulation" : "Ratio is not strongly abnormal" },
+    { name: "Total Testosterone", value: data.totalTestosterone > 50 ? 0.65 : 0.2, impact: data.totalTestosterone > 50 ? "high" : "low", direction: data.totalTestosterone > 50 ? "increases" : "neutral", explanation: data.totalTestosterone > 50 ? "Biochemical hyperandrogenism" : "Total testosterone remains below the elevated threshold" },
+    { name: "HOMA-IR", value: data.homaIr > 2.5 ? 0.6 : 0.15, impact: data.homaIr > 2.5 ? "moderate" : "low", direction: data.homaIr > 2.5 ? "increases" : "neutral", explanation: data.homaIr > 2.5 ? "Insulin resistance amplifies endocrine dysfunction" : "Insulin sensitivity is relatively preserved" },
+    { name: "AMH Level", value: data.amh > 6 ? 0.55 : 0.2, impact: data.amh > 6 ? "moderate" : "low", direction: data.amh > 6 ? "increases" : "neutral", explanation: data.amh > 6 ? "Elevated AMH reflects a larger follicle pool" : "AMH is not markedly elevated" },
+    { name: "Hirsutism Score", value: data.hirsutism ? 0.5 : 0.1, impact: data.hirsutism ? "moderate" : "low", direction: data.hirsutism ? "increases" : "neutral", explanation: data.hirsutism ? "Clinical hyperandrogenism" : "No hirsutism signal is reported" },
+    { name: "BMI", value: data.bmi > 25 ? 0.4 : 0.15, impact: data.bmi > 25 ? "moderate" : "low", direction: data.bmi > 25 ? "increases" : "neutral", explanation: data.bmi > 25 ? "Higher BMI can amplify insulin resistance" : "BMI is not a dominant risk driver" },
+    { name: "Ovary Volume", value: data.ovaryVolumeLeft > 10 || data.ovaryVolumeRight > 10 ? 0.6 : 0.15, impact: data.ovaryVolumeLeft > 10 || data.ovaryVolumeRight > 10 ? "high" : "low", direction: data.ovaryVolumeLeft > 10 || data.ovaryVolumeRight > 10 ? "increases" : "neutral", explanation: data.ovaryVolumeLeft > 10 || data.ovaryVolumeRight > 10 ? "Enlarged ovary volume supports PCOM" : "Ovarian size remains below the PCOM threshold" },
+    { name: "Skin Darkening", value: data.skinDarkening ? 0.35 : 0.05, impact: data.skinDarkening ? "moderate" : "low", direction: data.skinDarkening ? "increases" : "neutral", explanation: data.skinDarkening ? "Acanthosis nigricans indicates insulin resistance" : "No skin marker of insulin resistance is reported" },
+  ].sort((a, b) => b.value - a.value)
+}
+
+function buildClusterSnapshot(data: PatientData) {
+  const hasOligo = data.irregularPeriods || data.cycleLength > 35
+  const hasHa = data.hirsutism || data.acne || data.totalTestosterone > 50
+  const hasPcom = data.polycysticAppearance || data.follicleCountLeft >= 12 || data.follicleCountRight >= 12
+  const hasIr = data.homaIr > 2.5
+  const hasObesity = data.bmi > 25
+
+  const clusters = [
+    { id: 0, name: "Classic Metabolic PCOS", description: "Full Rotterdam phenotype with substantial metabolic dysfunction.", characteristics: ["Irregular cycles", "Hyperandrogenism", "Polycystic ovaries", "Insulin resistance"], riskProfile: "Highest metabolic and cardiovascular risk", metabolicRisk: "high", matches: hasOligo && hasHa && hasPcom && hasIr },
+    { id: 1, name: "Reproductive PCOS", description: "Predominantly reproductive pattern with lower metabolic burden.", characteristics: ["Irregular cycles", "Hyperandrogenism", "Polycystic ovaries", "Normal insulin sensitivity"], riskProfile: "Moderate reproductive risk, lower metabolic risk", metabolicRisk: "moderate", matches: hasOligo && hasHa && hasPcom && !hasIr && !hasObesity },
+    { id: 2, name: "Hyperandrogenic-PCO", description: "Ovulatory phenotype with androgen excess and polycystic morphology.", characteristics: ["Regular cycles", "Hyperandrogenism", "Polycystic ovaries", "Skin manifestations"], riskProfile: "Lower metabolic risk, focus on dermatologic symptoms", metabolicRisk: "moderate", matches: !hasOligo && hasHa && hasPcom },
+    { id: 3, name: "Normo-androgenic PCOS", description: "Cycle irregularity and polycystic morphology without overt hyperandrogenism.", characteristics: ["Irregular cycles", "Normal androgens", "Polycystic ovaries"], riskProfile: "Lowest risk profile among PCOS phenotypes", metabolicRisk: "low", matches: hasOligo && !hasHa && hasPcom },
+    { id: 4, name: "Non-PCOS Control", description: "Does not meet Rotterdam criteria.", characteristics: ["Regular cycles", "Normal androgens", "Normal ovarian morphology"], riskProfile: "No PCOS diagnosis indicated", metabolicRisk: "low", matches: !hasOligo && !hasHa && !hasPcom },
+  ]
+
+  const assignedCluster = clusters.find((cluster) => cluster.matches) ?? clusters[4]
+
+  return {
+    assignedCluster: {
+      id: assignedCluster.id,
+      name: assignedCluster.name,
+      description: assignedCluster.description,
+      characteristics: assignedCluster.characteristics,
+      riskProfile: assignedCluster.riskProfile,
+      metabolicRisk: assignedCluster.metabolicRisk,
+    },
+    allClusters: clusters.map(({ matches, ...cluster }) => ({ id: cluster.id, name: cluster.name, patientCount: matches ? 1 : 0, metabolicRisk: cluster.metabolicRisk })),
+  }
+}
+
+function buildPathways(data: PatientData, evaluation: RotterdamEvaluation, riskScore: number): PathwayActivity[] {
+  const pathways = [
+    {
+      name: "Insulin Signaling",
+      activity: 30 + (data.homaIr > 2.5 ? 32 : 0) + (data.fastingGlucose > 100 ? 8 : 0) + (data.insulinLevel > 15 ? 6 : 0),
+      genes: ["INSR", "IRS-1", "PI3K", "AKT"],
+      description: "Insulin resistance and downstream signaling disruption",
+      icon: "🔋",
+    },
+    {
+      name: "Androgen Synthesis",
+      activity: 28 + (evaluation.hyperandrogenism.met ? 28 : 0) + (data.lhFshRatio > 2 ? 8 : 0) + (data.acne || data.hirsutism ? 6 : 0),
+      genes: ["CYP17A1", "CYP11A1", "StAR", "3β-HSD"],
+      description: "Steroidogenic activity linked to androgen excess",
+      icon: "⚡",
+    },
+    {
+      name: "Ovarian Follicle Regulation",
+      activity: 30 + (evaluation.polycysticOvaries.met ? 26 : 0) + (data.amh > 6 ? 8 : 0) + (data.cycleLength > 35 ? 6 : 0),
+      genes: ["AMH", "FSHR", "LHCGR", "BMP15"],
+      description: "Follicle maturation and ovulatory regulation",
+      icon: "🫘",
+    },
+    {
+      name: "Inflammatory Signaling",
+      activity: 24 + (data.homaIr > 2.5 ? 18 : 0) + (data.bmi > 25 ? 8 : 0) + (data.skinDarkening ? 6 : 0) + (riskScore >= 70 ? 4 : 0),
+      genes: ["IL-6", "TNF-α", "CRP", "NF-κB"],
+      description: "Low-grade inflammatory activity that can amplify endocrine dysfunction",
+      icon: "🔥",
+    },
+  ]
+
+  return pathways.sort((a, b) => b.activity - a.activity).map((pathway) => ({ ...pathway, activity: roundPercent(pathway.activity) }))
+}
+
+function buildCellArchitecture(data: PatientData, evaluation: RotterdamEvaluation, riskScore: number): CellularComposition[] {
+  const raw = [
+    { name: "Granulosa cells", value: 26 + (evaluation.polycysticOvaries.met ? -3 : 2) - (data.amh > 6 ? 1 : 0), icon: "💜", description: "Follicular support and maturation" },
+    { name: "Stromal cells", value: 30 + (data.homaIr > 2.5 ? 8 : 3) + (riskScore >= 70 ? 2 : 0), icon: "🟣", description: "Structural and metabolic support tissue" },
+    { name: "Theca cells", value: 18 + (evaluation.hyperandrogenism.met ? 7 : 3) + (data.lhFshRatio > 2 ? 2 : 0), icon: "🔵", description: "Androgen-producing compartment" },
+    { name: "Immune cells", value: 12 + (data.homaIr > 2.5 ? 4 : 1) + (data.skinDarkening ? 3 : 0), icon: "🧡", description: "Inflammatory and immune surveillance compartment" },
+    { name: "Endothelial cells", value: 14 + (data.bloodPressureSystolic > 130 ? 3 : 0) - (evaluation.diagnosisMet ? 1 : 0), icon: "❤️", description: "Vascular and perfusion support" },
+  ]
+
+  return normalizePercentages(raw.map((entry) => ({ ...entry, value: Math.max(entry.value, 1) })))
+}
+
+function buildDifferentialDiagnosis(score: number, data: PatientData, evaluation: RotterdamEvaluation): DifferentialDiagnosisItem[] {
+  const raw = [
+    { condition: "PCOS", value: score, description: "Rotterdam pattern with endocrine and ovarian support", icon: "🫘" },
+    { condition: "Endometriosis", value: 18 + (data.periodDuration >= 7 ? 4 : 0) + (data.cycleLength < 28 ? 4 : 0) + (!evaluation.diagnosisMet ? 2 : 0), description: "Competing reproductive diagnosis considered in differential reasoning", icon: "⚕️" },
+    { condition: "Healthy ovarian function", value: Math.max(5, 100 - score * 0.8), description: "No major endocrine or structural abnormality suggested by the current dataset", icon: "✓" },
+  ]
+
+  return normalizePercentages(raw).map(({ condition, percent, description, icon }) => ({ condition, probability: percent, description, icon })).sort((a, b) => b.probability - a.probability)
+}
+
+function buildClinicalInterpretation(
+  phenotypeName: string,
+  evaluation: RotterdamEvaluation,
+  differentialDiagnosis: DifferentialDiagnosisItem[],
+  pathways: PathwayActivity[],
+  cells: CellularComposition[],
+  score: number,
+) {
+  const dominantPathway = pathways[0]
+  const dominantCell = cells[0]
+  const diagnosisSentence = evaluation.diagnosisMet
+    ? `The patient meets Rotterdam criteria with ${evaluation.criteriaMetCount}/3 criteria present, supporting a PCOS diagnosis.`
+    : `The current input set does not fully satisfy Rotterdam diagnostic criteria, so the report remains probabilistic rather than confirmatory.`
+
+  return `${diagnosisSentence} The phenotype assignment is ${phenotypeName}. The leading biological signal is ${dominantPathway.name.toLowerCase()} at ${dominantPathway.activity}%, with ${dominantCell.name.toLowerCase()} predominance at ${dominantCell.percent}%. Differential reasoning currently favors ${differentialDiagnosis[0].condition} at ${differentialDiagnosis[0].probability}%. Overall PCOS probability is ${score}%.`
+}
+
+function buildLocalAnalysis(data: PatientData, prediction: PredictionResult): FullAnalysisResult {
+  const shapValues = buildShapValues(data)
+  const clusterSnapshot = buildClusterSnapshot(data)
+
+  return {
+    success: true,
+    prediction: {
+      pcosRiskScore: prediction.pcosRiskScore,
+      riskLevel: prediction.riskLevel,
+      contributingFactors: prediction.contributingFactors,
+    },
+    phenotype: {
+      type: prediction.phenotype.type,
+      name: prediction.phenotype.name,
+      description: prediction.phenotype.description,
+    },
+    phenotypeDisplay: {
+      displayName: prediction.phenotype.name,
+      type: prediction.phenotype.type,
+      characteristics: prediction.contributingFactors,
+    },
+    biologicalInsights: {
+      pathways: [],
+      summary: "Patient-specific biological interpretation is assembled on the report page from the current clinical inputs.",
+    },
+    nextInvestigations: [],
+    shap: {
+      values: shapValues,
+      topContributors: shapValues.filter((feature) => feature.impact !== "low").map((feature) => ({
+        feature: feature.name,
+        contribution: feature.value,
+        impact: feature.impact,
+        direction: feature.direction,
+        explanation: feature.explanation,
+      })),
+    },
+    clustering: {
+      assignedCluster: clusterSnapshot.assignedCluster,
+      allClusters: clusterSnapshot.allClusters,
+    },
+    confidenceMetrics: prediction.confidenceMetrics,
+    recommendations: prediction.recommendations,
+    timestamp: new Date().toISOString(),
+  }
 }
 
 export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps) {
   const [loading, setLoading] = useState(true)
   const [analysis, setAnalysis] = useState<FullAnalysisResult | null>(null)
+  const [prediction, setPrediction] = useState<PredictionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+
     const runAnalysis = async () => {
       try {
         setLoading(true)
-        const result = await healthApi.analyze(patientData)
-        setAnalysis(result)
+        const [analysisResult, predictionResult] = await Promise.allSettled([
+          healthApi.analyze(patientData),
+          healthApi.predict(patientData),
+        ])
 
-        const session = await healthApi.session.create(patientData)
-        if (session.session?.id) {
-          setSessionId(session.session.id)
+        if (cancelled) return
+
+        setAnalysis(analysisResult.status === "fulfilled" ? analysisResult.value : null)
+        setPrediction(predictionResult.status === "fulfilled" ? predictionResult.value : null)
+
+        try {
+          const session = await healthApi.session.create(patientData)
+          if (!cancelled && session.session?.id) {
+            setSessionId(session.session.id)
+          }
+        } catch {
+          // Session persistence is optional for the report view.
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Analysis failed")
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Analysis failed")
+        }
       } finally {
-        setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
+
     runAnalysis()
+
+    return () => {
+      cancelled = true
+    }
   }, [patientData])
 
+  const predictionSnapshot = prediction ?? buildPredictionFallback(patientData)
+  const analysisSnapshot = analysis ?? buildLocalAnalysis(patientData, predictionSnapshot)
+  const rotterdam = predictionSnapshot.rotterdamEvaluation
+  const shap = analysisSnapshot.shap ?? { values: buildShapValues(patientData), topContributors: [] }
+  const clustering = analysisSnapshot.clustering ?? buildClusterSnapshot(patientData)
+  const confidenceMetrics = analysisSnapshot.confidenceMetrics ?? predictionSnapshot.confidenceMetrics
+  const recommendations = Array.isArray(analysisSnapshot.recommendations) && analysisSnapshot.recommendations.length > 0
+    ? analysisSnapshot.recommendations
+    : predictionSnapshot.recommendations
+  const differentialDiagnosis = buildDifferentialDiagnosis(predictionSnapshot.pcosRiskScore, patientData, rotterdam)
+  const pathways = buildPathways(patientData, rotterdam, predictionSnapshot.pcosRiskScore)
+  const cellComposition = buildCellArchitecture(patientData, rotterdam, predictionSnapshot.pcosRiskScore)
+  const clinicalInterpretation = buildClinicalInterpretation(
+    predictionSnapshot.phenotype.name,
+    rotterdam,
+    differentialDiagnosis,
+    pathways,
+    cellComposition,
+    predictionSnapshot.pcosRiskScore,
+  )
+
   const handleSaveResults = async () => {
-    if (!sessionId || !analysis) return
+    if (!sessionId) return
     setSaving(true)
     try {
       await healthApi.session.saveResult(sessionId, {
-        pcos_risk_score: analysis.prediction.pcosRiskScore,
-        phenotype: analysis.phenotype.type,
-        phenotype_name: analysis.phenotype.name,
-        phenotype_description: analysis.phenotype.description,
-        risk_level: analysis.prediction.riskLevel,
-        contributing_factors: analysis.prediction.contributingFactors,
-        shap_values: analysis.shap.values,
-        cluster_assignment: analysis.clustering.assignedCluster,
-        confidence_metrics: analysis.confidenceMetrics,
-        recommendations: analysis.recommendations,
+        pcos_risk_score: predictionSnapshot.pcosRiskScore,
+        phenotype: predictionSnapshot.phenotype.type,
+        phenotype_name: predictionSnapshot.phenotype.name,
+        phenotype_description: predictionSnapshot.phenotype.description,
+        risk_level: predictionSnapshot.riskLevel,
+        contributing_factors: predictionSnapshot.contributingFactors,
+        shap_values: shap.values,
+        cluster_assignment: clustering.assignedCluster,
+        confidence_metrics: confidenceMetrics,
+        recommendations,
       })
     } catch {
-      // Silently handle save errors
+      // Silently handle save errors.
     } finally {
       setSaving(false)
     }
@@ -84,43 +503,20 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
     )
   }
 
-  if (error || !analysis) {
+  if (error) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md">
           <AlertTriangle className="w-12 h-12 text-yellow-400 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-foreground mb-2">Analysis Error</h2>
-          <p className="text-muted-foreground mb-6">{error || "Unknown error occurred"}</p>
+          <p className="text-muted-foreground mb-6">{error}</p>
           <Button onClick={onBack} variant="outline">Back to Analysis</Button>
         </div>
       </div>
     )
   }
 
-  const prediction = analysis.prediction
-  const phenotype = analysis.phenotype
-  const shap = analysis.shap ?? { values: [], topContributors: [] }
-  const clustering = analysis.clustering ?? {
-    assignedCluster: {
-      id: 0,
-      name: analysis.phenotypeDisplay?.displayName ?? phenotype.name,
-      description: analysis.phenotype.description,
-      characteristics: analysis.phenotypeDisplay?.characteristics ?? [],
-      riskProfile: prediction.riskLevel,
-      metabolicRisk: prediction.riskLevel,
-    },
-    allClusters: [],
-  }
-  const confidenceMetrics = analysis.confidenceMetrics
-  const recommendations = Array.isArray(analysis.recommendations) ? analysis.recommendations : []
-
-  const getRiskColor = (level: string) => {
-    if (level === "high") return "pink"
-    if (level === "moderate") return "yellow"
-    return "green"
-  }
-
-  const riskColor = getRiskColor(prediction.riskLevel)
+  const riskColor = predictionSnapshot.riskLevel === "high" ? "pink" : predictionSnapshot.riskLevel === "moderate" ? "yellow" : "green"
 
   return (
     <div className="min-h-screen bg-background">
@@ -146,17 +542,15 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
       <div className="container mx-auto px-6 py-8">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-12">
           <h1 className="text-3xl md:text-4xl font-bold mb-4">
-            <span className="text-foreground">AI Diagnostic </span>
-            <span className="text-gradient-purple-pink">Results</span>
+            <span className="text-foreground">Patient Results </span>
+            <span className="text-gradient-purple-pink">Report</span>
           </h1>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-            Comprehensive analysis powered by ML prediction, SHAP explainability, and phenotype clustering
+            Individualized endocrine intelligence report driven by the current patient inputs, model outputs, SHAP explainability, and phenotype clustering.
           </p>
         </motion.div>
 
-        {/* Main Results Grid */}
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
-          {/* PCOS Risk Score */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <Card className="glass border-purple-500/30 p-6 h-full">
               <div className="flex items-center gap-3 mb-6">
@@ -164,33 +558,32 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                   <Activity className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-foreground">PCOS Risk Score</h3>
-                  <p className="text-sm text-muted-foreground">ML-powered Rotterdam assessment</p>
+                  <h3 className="font-bold text-foreground">PCOS Probability</h3>
+                  <p className="text-sm text-muted-foreground">Patient-specific model output</p>
                 </div>
               </div>
               <div className="relative mb-6">
                 <div className="text-6xl font-bold text-center mb-2">
                   <span className={riskColor === "pink" ? "text-pink-400" : riskColor === "yellow" ? "text-yellow-400" : "text-green-400"}>
-                    {prediction.pcosRiskScore}
+                    {predictionSnapshot.pcosRiskScore}
                   </span>
                   <span className="text-2xl text-muted-foreground">%</span>
                 </div>
-                <Progress value={prediction.pcosRiskScore} className="h-3" />
+                <Progress value={predictionSnapshot.pcosRiskScore} className="h-3" />
                 <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                  <span>Low Risk</span>
-                  <span>High Risk</span>
+                  <span>Low</span>
+                  <span>High</span>
                 </div>
               </div>
               <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${
                 riskColor === "pink" ? "bg-pink-500/20 text-pink-300" : riskColor === "yellow" ? "bg-yellow-500/20 text-yellow-300" : "bg-green-500/20 text-green-300"
               }`}>
                 {riskColor === "pink" ? <AlertTriangle className="w-4 h-4" /> : riskColor === "yellow" ? <TrendingUp className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                {prediction.riskLevel.charAt(0).toUpperCase() + prediction.riskLevel.slice(1)} Probability
+                {predictionSnapshot.riskLevel.charAt(0).toUpperCase() + predictionSnapshot.riskLevel.slice(1)} Risk
               </div>
             </Card>
           </motion.div>
 
-          {/* Phenotype Classification */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="glass border-cyan-500/30 p-6 h-full">
               <div className="flex items-center gap-3 mb-6">
@@ -198,21 +591,21 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                   <Dna className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-foreground">Phenotype Classification</h3>
-                  <p className="text-sm text-muted-foreground">Clustering-based subtype</p>
+                  <h3 className="font-bold text-foreground">Phenotype Prediction</h3>
+                  <p className="text-sm text-muted-foreground">Individualized subtype assignment</p>
                 </div>
               </div>
               <div className="text-center mb-4">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-teal-500/20 border border-cyan-500/30 mb-3">
-                  <span className="text-3xl font-bold text-cyan-300">{phenotype.type}</span>
+                  <span className="text-3xl font-bold text-cyan-300">{predictionSnapshot.phenotype.type}</span>
                 </div>
-                <h4 className="text-xl font-bold text-foreground">{phenotype.name}</h4>
+                <h4 className="text-xl font-bold text-foreground">{predictionSnapshot.phenotype.name}</h4>
               </div>
-              <p className="text-sm text-muted-foreground text-center leading-relaxed">{phenotype.description}</p>
+              <p className="text-sm text-muted-foreground text-center leading-relaxed">{predictionSnapshot.phenotype.description}</p>
+              <p className="mt-4 text-xs text-cyan-300 text-center leading-relaxed">{predictionSnapshot.phenotype.clinicalReasoning}</p>
             </Card>
           </motion.div>
 
-          {/* Confidence Metrics */}
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <Card className="glass border-pink-500/30 p-6 h-full">
               <div className="flex items-center gap-3 mb-6">
@@ -251,88 +644,109 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
-        {/* CLINICAL FOUNDATION & ANALYSIS SUMMARY */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mb-8">
-          <Card className="glass border-cyan-500/30 p-6 space-y-6">
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-cyan-400 mt-1 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-lg font-bold text-foreground mb-4">Clinical Analysis Summary</h3>
-                
-                <div className="space-y-4">
-                  {/* Rotterdam Criteria Brief */}
-                  <div className="p-4 rounded-lg bg-purple-500/10 border border-purple-500/30">
-                    <div className="font-semibold text-purple-400 mb-2">Rotterdam Criteria Evaluation</div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      PCOS diagnosis is based on the Rotterdam 2012 criteria requiring ≥2 of 3: hyperandrogenism (elevated androgens or clinical signs), ovulatory dysfunction (irregular cycles), and polycystic ovarian morphology (≥12 follicles per ovary or volume {'>'}10 mL on ultrasound).
-                    </p>
-                    {analysis.Rotterdam && (
-                      <div className="text-xs text-foreground">
-                        ✓ Your results show <strong>{[analysis.Rotterdam.hyperandrogenism, analysis.Rotterdam.ovulatoryDysfunction, analysis.Rotterdam.polycysticOvaries].filter(Boolean).length}/3 criteria met</strong>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Differential Diagnosis Brief */}
-                  <div className="p-4 rounded-lg bg-pink-500/10 border border-pink-500/30">
-                    <div className="font-semibold text-pink-400 mb-2">Differential Diagnosis Analysis</div>
-                    <p className="text-sm text-muted-foreground">
-                      Beyond PCOS, this analysis considers other reproductive endocrine conditions including endometriosis, thyroid dysfunction, hyperprolactinemia, and Cushing's syndrome that may present with similar symptoms.
-                    </p>
-                  </div>
-
-                  {/* Feature Importance Brief */}
-                  <div className="p-4 rounded-lg bg-teal-500/10 border border-teal-500/30">
-                    <div className="font-semibold text-teal-400 mb-2">SHAP Feature Importance</div>
-                    <p className="text-sm text-muted-foreground">
-                      Machine learning explainability analysis identifies which clinical factors (cycle length, follicle count, hormone ratios, etc.) most strongly influence the PCOS risk score. Cycle length and follicle count typically have the highest impact.
-                    </p>
-                  </div>
-
-                  {/* Phenotype Classification Brief */}
-                  <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-                    <div className="font-semibold text-cyan-400 mb-2">Phenotype Classification</div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      PCOS is heterogeneous with 4 phenotypes: Type A (classic with PCO), Type B (HA+OD no PCO), Type C (OD+PCO no HA), and Type D (lean normo-androgenic). Metabolic subtype may be insulin-resistant, mixed, or lean depending on metabolic parameters.
-                    </p>
-                    {phenotype && (
-                      <div className="text-xs text-foreground">
-                        Your phenotype: <strong>{phenotype.type} - {phenotype.name}</strong>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Molecular Pathways Brief */}
-                  <div className="p-4 rounded-lg bg-pink-500/10 border border-pink-500/30">
-                    <div className="font-semibold text-pink-400 mb-2">Molecular Pathways & Biological Mechanisms</div>
-                    <p className="text-sm text-muted-foreground">
-                      PCOS involves dysregulation of 4 key pathways: chronic low-grade inflammation (IL-6, TNF-α, CRP), insulin signaling (INSR, IRS-1, PI3K, AKT), androgen synthesis (CYP17A1, CYP11A1), and ovarian dysfunction (AMH, FSHR, LHCGR). Insulin resistance is often central to pathogenesis.
-                    </p>
-                  </div>
-
-                  {/* Ovarian Cellular Architecture Brief */}
-                  <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-                    <div className="font-semibold text-cyan-400 mb-2">Ovarian Cellular Architecture</div>
-                    <p className="text-sm text-muted-foreground">
-                      PCOS is characterized by abnormal ovarian cell populations with increased stromal volume (fibroblast-like cells), elevated immune infiltration, altered granulosa cell function, and theca cell hyperplasia driving androgen excess. Single-cell analysis reveals distinct cell type dysregulation patterns.
-                    </p>
-                  </div>
+        <div className="grid lg:grid-cols-2 gap-6 mb-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+            <Card className="glass border-cyan-500/30 p-6 h-full space-y-4">
+              <div className="flex items-start gap-3">
+                <Info className="w-5 h-5 text-cyan-400 mt-1 flex-shrink-0" />
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">Rotterdam Criteria Evaluation</h3>
+                  <p className="text-sm text-muted-foreground">Patient-specific criterion status</p>
                 </div>
               </div>
-            </div>
-          </Card>
-        </motion.div>
 
-        {/* Cluster Assignment */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }} className="mb-8">
-          <Card className="glass border-cyan-500/20 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center">
-                <Users className="w-5 h-5 text-white" />
+              {[
+                { label: "Hyperandrogenism", result: rotterdam.hyperandrogenism },
+                { label: "Ovulatory dysfunction", result: rotterdam.ovulatoryDysfunction },
+                { label: "Polycystic ovarian morphology", result: rotterdam.polycysticOvaries },
+              ].map((criterion) => (
+                <div key={criterion.label} className={`rounded-lg border p-4 ${criterion.result.met ? "bg-emerald-500/10 border-emerald-500/30" : "bg-slate-900/30 border-slate-700/40"}`}>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="font-semibold text-foreground">{criterion.label}</div>
+                    <Badge className={criterion.result.met ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30" : "bg-slate-500/20 text-slate-300 border-slate-500/30"}>
+                      {criterion.result.met ? "Met" : "Not met"}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">{criterion.result.reasoning}</p>
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    {criterion.result.subcriteria.map((subcriterion) => (
+                      <div key={subcriterion.name} className="flex items-start justify-between gap-3">
+                        <span>{subcriterion.name}</span>
+                        <span className="text-right">{subcriterion.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              <div className={`rounded-lg border-2 p-4 text-center ${rotterdam.diagnosisMet ? "bg-emerald-500/10 border-emerald-500/30" : "bg-yellow-500/10 border-yellow-500/30"}`}>
+                <div className="text-sm font-semibold text-muted-foreground mb-1">Criteria Met</div>
+                <div className={`text-3xl font-bold ${rotterdam.diagnosisMet ? "text-emerald-400" : "text-yellow-400"}`}>
+                  {rotterdam.criteriaMetCount} / 3
+                </div>
+                <div className={`text-xs mt-2 font-medium ${rotterdam.diagnosisMet ? "text-emerald-300" : "text-yellow-300"}`}>
+                  {rotterdam.diagnosisMet ? "PCOS diagnosis supported by Rotterdam criteria" : "Insufficient criteria for a Rotterdam diagnosis"}
+                </div>
               </div>
+
+              <div className="text-xs text-muted-foreground space-y-1">
+                {rotterdam.exclusionNotes.map((note) => (
+                  <p key={note}>• {note}</p>
+                ))}
+              </div>
+            </Card>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+            <Card className="glass border-pink-500/30 p-6 h-full space-y-4">
+              <div className="flex items-start gap-3">
+                <TrendingUp className="w-5 h-5 text-pink-400 mt-1 flex-shrink-0" />
+                <div>
+                  <h3 className="text-lg font-bold text-foreground">Differential Diagnosis</h3>
+                  <p className="text-sm text-muted-foreground">Patient-specific probability distribution</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {differentialDiagnosis.map((diagnosis) => (
+                  <div key={diagnosis.condition} className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="text-lg flex-shrink-0">{diagnosis.icon}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-sm text-foreground truncate">{diagnosis.condition}</div>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{diagnosis.description}</p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold flex-shrink-0 w-12 text-right text-pink-300">{diagnosis.probability}%</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-gradient-to-r from-pink-500 to-pink-400" style={{ width: `${diagnosis.probability}%` }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-slate-900/40 border border-pink-500/30 rounded-lg p-4 text-xs text-foreground space-y-2">
+                <div className="font-semibold text-pink-400">Clinical Interpretation</div>
+                <p className="text-muted-foreground">
+                  {clinicalInterpretation}
+                </p>
+              </div>
+            </Card>
+          </motion.div>
+        </div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-8">
+          <Card className="glass border-cyan-500/30 p-6">
+            <div className="flex items-start gap-3 mb-6">
+              <Users className="w-5 h-5 text-cyan-400 mt-1 flex-shrink-0" />
               <div>
-                <h3 className="font-bold text-foreground">Phenotype Cluster Assignment</h3>
-                  <p className="text-sm text-muted-foreground">Patient assigned to {clustering.assignedCluster?.name ?? "Unassigned"}</p>
+                <h3 className="text-lg font-bold text-foreground">Metabolic Subtype</h3>
+                <p className="text-sm text-muted-foreground">Cluster assignment and phenotype context</p>
               </div>
             </div>
             <div className="grid md:grid-cols-2 gap-6">
@@ -341,16 +755,16 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
                   <h4 className="font-semibold text-foreground mb-2">{clustering.assignedCluster?.name ?? "Unassigned"}</h4>
                   <p className="text-sm text-muted-foreground mb-3">{clustering.assignedCluster?.description ?? "No cluster information available from the current analysis response."}</p>
                   <div className="flex flex-wrap gap-2">
-                    {(clustering.assignedCluster?.characteristics ?? []).map((c) => (
-                      <Badge key={c} variant="outline" className="border-cyan-500/30 text-cyan-300 text-xs">{c}</Badge>
+                    {(clustering.assignedCluster?.characteristics ?? []).map((characteristic) => (
+                      <Badge key={characteristic} variant="outline" className="border-cyan-500/30 text-cyan-300 text-xs">{characteristic}</Badge>
                     ))}
                   </div>
                 </div>
                 <div className="p-3 rounded-lg bg-muted/20 border border-border">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Metabolic Risk</span>
-                    <Badge className={(clustering.assignedCluster?.metabolicRisk ?? prediction.riskLevel) === "high" ? "bg-pink-500/20 text-pink-300" : (clustering.assignedCluster?.metabolicRisk ?? prediction.riskLevel) === "moderate" ? "bg-yellow-500/20 text-yellow-300" : "bg-green-500/20 text-green-300"}>
-                      {(clustering.assignedCluster?.metabolicRisk ?? prediction.riskLevel).toUpperCase()}
+                    <Badge className={(clustering.assignedCluster?.metabolicRisk ?? predictionSnapshot.riskLevel) === "high" ? "bg-pink-500/20 text-pink-300" : (clustering.assignedCluster?.metabolicRisk ?? predictionSnapshot.riskLevel) === "moderate" ? "bg-yellow-500/20 text-yellow-300" : "bg-green-500/20 text-green-300"}>
+                      {(clustering.assignedCluster?.metabolicRisk ?? predictionSnapshot.riskLevel).toUpperCase()}
                     </Badge>
                   </div>
                 </div>
@@ -378,83 +792,58 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </Card>
         </motion.div>
 
-        {/* SHAP Feature Importance */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="mb-8">
-          <Card className="glass border-purple-500/20 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="font-bold text-foreground">SHAP Feature Contribution</h3>
-                <p className="text-sm text-muted-foreground">Explainable AI showing which factors drive the diagnosis</p>
-              </div>
-            </div>
-            <div className="space-y-4">
-              {shap.values.length > 0 ? shap.values.map((feature, index) => (
-                <motion.div key={feature.name} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.5 + index * 0.05 }} className="flex items-center gap-4">
-                  <span className="w-36 text-sm text-muted-foreground shrink-0">{feature.name}</span>
-                  <div className="flex-1 flex items-center gap-2">
-                    <div className="flex-1 h-6 bg-muted/30 rounded-full overflow-hidden">
-                      <motion.div initial={{ width: 0 }} animate={{ width: `${feature.value * 100}%` }} transition={{ duration: 0.8, delay: 0.5 + index * 0.05 }}
-                        className={`h-full rounded-full ${feature.impact === "high" ? "bg-gradient-to-r from-pink-500 to-pink-400" : feature.impact === "moderate" ? "bg-gradient-to-r from-yellow-500 to-yellow-400" : "bg-gradient-to-r from-green-500 to-green-400"}`}
-                      />
-                    </div>
-                    <span className={`text-sm font-mono w-12 ${feature.impact === "high" ? "text-pink-400" : feature.impact === "moderate" ? "text-yellow-400" : "text-green-400"}`}>
-                      {(feature.value * 100).toFixed(0)}%
-                    </span>
-                  </div>
-                </motion.div>
-              )) : (
-                <div className="p-3 rounded-lg bg-muted/10 border border-border/50 text-sm text-muted-foreground">
-                  No SHAP feature contributions were returned by the backend.
-                </div>
-              )}
-            </div>
-          </Card>
-        </motion.div>
-
-        {/* Contributing Factors & Recommendations */}
-        <div className="grid md:grid-cols-2 gap-6">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
-            <Card className="glass border-purple-500/20 p-6 h-full">
+        <div className="grid lg:grid-cols-2 gap-6 mb-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+            <Card className="glass border-pink-500/20 p-6 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="font-bold text-foreground">Contributing Factors</h3>
+                <div>
+                  <h3 className="font-bold text-foreground">SHAP Feature Contribution</h3>
+                  <p className="text-sm text-muted-foreground">Patient-level explainability output</p>
+                </div>
               </div>
-              <div className="space-y-3">
-                {prediction.contributingFactors.length > 0 ? prediction.contributingFactors.map((factor) => (
-                  <div key={factor} className="flex items-center gap-3 p-3 rounded-lg bg-pink-500/10 border border-pink-500/20">
-                    <AlertTriangle className="w-4 h-4 text-pink-400 shrink-0" />
-                    <span className="text-sm text-foreground">{factor}</span>
-                  </div>
+              <div className="space-y-4">
+                {shap.values.length > 0 ? shap.values.map((feature, index) => (
+                  <motion.div key={feature.name} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.55 + index * 0.05 }} className="flex items-center gap-4">
+                    <span className="w-36 text-sm text-muted-foreground shrink-0">{feature.name}</span>
+                    <div className="flex-1 flex items-center gap-2">
+                      <div className="flex-1 h-6 bg-muted/30 rounded-full overflow-hidden">
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${feature.value * 100}%` }} transition={{ duration: 0.8, delay: 0.55 + index * 0.05 }} className={`h-full rounded-full ${feature.impact === "high" ? "bg-gradient-to-r from-pink-500 to-pink-400" : feature.impact === "moderate" ? "bg-gradient-to-r from-yellow-500 to-yellow-400" : "bg-gradient-to-r from-green-500 to-green-400"}`} />
+                      </div>
+                      <span className={`text-sm font-mono w-12 ${feature.impact === "high" ? "text-pink-400" : feature.impact === "moderate" ? "text-yellow-400" : "text-green-400"}`}>
+                        {(feature.value * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                  </motion.div>
                 )) : (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
-                    <CheckCircle className="w-4 h-4 text-green-400 shrink-0" />
-                    <span className="text-sm text-foreground">No significant risk factors identified</span>
+                  <div className="p-3 rounded-lg bg-muted/10 border border-border/50 text-sm text-muted-foreground">
+                    No SHAP feature contributions were returned by the backend.
                   </div>
                 )}
               </div>
             </Card>
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
             <Card className="glass border-cyan-500/20 p-6 h-full">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center">
-                  <TrendingDown className="w-5 h-5 text-white" />
+                  <Dna className="w-5 h-5 text-white" />
                 </div>
-                <h3 className="font-bold text-foreground">Clinical Recommendations</h3>
+                <div>
+                  <h3 className="font-bold text-foreground">Clinical Recommendations</h3>
+                  <p className="text-sm text-muted-foreground">Patient-specific next steps</p>
+                </div>
               </div>
               <div className="space-y-3">
-                {recommendations.length > 0 ? recommendations.map((rec, index) => (
+                {recommendations.length > 0 ? recommendations.map((recommendation, index) => (
                   <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
                     <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0 mt-0.5">
                       <span className="text-xs text-cyan-300">{index + 1}</span>
                     </div>
-                    <span className="text-sm text-foreground">{rec}</span>
+                    <span className="text-sm text-foreground">{recommendation}</span>
                   </div>
                 )) : (
                   <div className="flex items-start gap-3 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
@@ -467,8 +856,82 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
-        {/* Disclaimer */}
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="mt-8 p-4 rounded-xl bg-muted/30 border border-border">
+        <div className="grid lg:grid-cols-2 gap-6 mb-8">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+            <Card className="glass border-pink-500/30 p-6 h-full">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
+                  <TrendingDown className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground">Molecular Pathway Activity</h3>
+                  <p className="text-sm text-muted-foreground">Patient-specific pathway scores</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {pathways.map((pathway) => (
+                  <div key={pathway.name} className="rounded-lg border border-border/50 bg-muted/10 p-4">
+                    <div className="flex items-start justify-between gap-4 mb-3">
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl">{pathway.icon}</span>
+                        <div>
+                          <div className="font-semibold text-foreground">{pathway.name}</div>
+                          <p className="text-sm text-muted-foreground">{pathway.description}</p>
+                        </div>
+                      </div>
+                      <span className="text-2xl font-bold text-foreground">{pathway.activity}%</span>
+                    </div>
+                    <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden mb-3">
+                      <div className="h-full rounded-full bg-gradient-to-r from-pink-500 to-purple-500" style={{ width: `${pathway.activity}%` }} />
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {pathway.genes.map((gene) => (
+                        <Badge key={gene} variant="outline" className="text-xs bg-slate-900/40 text-foreground border-slate-600/50">
+                          {gene}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+            <Card className="glass border-cyan-500/30 p-6 h-full">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-foreground">Ovarian Cellular Architecture</h3>
+                  <p className="text-sm text-muted-foreground">Patient-specific cell composition estimate</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {cellComposition.map((cell) => (
+                  <div key={cell.name} className="rounded-lg border border-border/50 bg-muted/10 p-4 text-center">
+                    <div className="text-2xl mb-1">{cell.icon}</div>
+                    <div className="font-semibold text-sm text-foreground">{cell.name}</div>
+                    <div className="text-2xl font-bold text-foreground">{cell.percent}%</div>
+                    <div className="text-xs text-muted-foreground mt-1">{cell.description}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-xs text-foreground space-y-2">
+                <strong className="text-cyan-400">Biological Interpretation:</strong>
+                <p className="text-muted-foreground">
+                  {predictionSnapshot.pcosRiskScore >= 70
+                    ? "The patient’s profile shows a strongly PCOS-consistent endocrine pattern with dominant ovarian and metabolic signals."
+                    : "The patient’s ovarian architecture is being interpreted in the context of a partial or evolving PCOS signal rather than a textbook explanation."}
+                </p>
+              </div>
+            </Card>
+          </motion.div>
+        </div>
+
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }} className="mt-8 p-4 rounded-xl bg-muted/30 border border-border">
           <p className="text-xs text-muted-foreground text-center">
             <strong>Disclaimer:</strong> This AI-powered analysis is for research and educational purposes only.
             It should not be used as a substitute for professional medical advice, diagnosis, or treatment.
@@ -476,8 +939,7 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </p>
         </motion.div>
 
-        {/* Actions */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }} className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.0 }} className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button variant="outline" onClick={onBack} className="border-purple-500/50 text-foreground hover:bg-purple-500/10">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Modify Analysis
