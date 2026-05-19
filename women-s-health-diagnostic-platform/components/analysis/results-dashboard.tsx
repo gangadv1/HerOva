@@ -1101,6 +1101,52 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
+        {/* Public health note — why early awareness matters */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }} className="mb-8">
+          <Card className={`glass p-5 border ${
+            predictionSnapshot.riskLevel === "high"
+              ? "border-pink-500/30 bg-pink-500/5"
+              : predictionSnapshot.riskLevel === "moderate"
+              ? "border-amber-500/30 bg-amber-500/5"
+              : "border-green-500/30 bg-green-500/5"
+          }`}>
+            <div className="flex items-start gap-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                predictionSnapshot.riskLevel === "high"
+                  ? "bg-pink-500/20 border border-pink-500/30"
+                  : predictionSnapshot.riskLevel === "moderate"
+                  ? "bg-amber-500/20 border border-amber-500/30"
+                  : "bg-green-500/20 border border-green-500/30"
+              }`}>
+                <Users className={`w-4 h-4 ${
+                  predictionSnapshot.riskLevel === "high" ? "text-pink-400"
+                  : predictionSnapshot.riskLevel === "moderate" ? "text-amber-400"
+                  : "text-green-400"
+                }`} />
+              </div>
+              <div className="space-y-2 flex-1 min-w-0">
+                <p className={`text-xs font-semibold uppercase tracking-wider ${
+                  predictionSnapshot.riskLevel === "high" ? "text-pink-400"
+                  : predictionSnapshot.riskLevel === "moderate" ? "text-amber-400"
+                  : "text-green-400"
+                }`}>
+                  Why Early Awareness Matters
+                </p>
+                <p className="text-sm text-foreground leading-relaxed">
+                  {predictionSnapshot.riskLevel === "high"
+                    ? "A high-risk pattern like this one — particularly when multiple Rotterdam criteria are met — is associated with long-term cardiometabolic and reproductive health implications if left unaddressed. Earlier follow-up with a clinician can support timely lifestyle, metabolic, and hormonal intervention before complications develop."
+                    : predictionSnapshot.riskLevel === "moderate"
+                    ? "A moderate-risk pattern suggests some clinically relevant signals are present. Even without a confirmed diagnosis, earlier awareness can support proactive monitoring, lifestyle adjustments, and a structured conversation with a GP or specialist about next steps."
+                    : "A low-risk pattern is reassuring, but monitoring cycle health, metabolic indicators, and androgen symptoms over time remains valuable — particularly if the pattern evolves or additional data becomes available."}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  <strong>When to seek professional care:</strong> If this report flags moderate or high risk, consider sharing it with a GP or endocrinologist to guide follow-up. This output is decision-support only and does not constitute a clinical diagnosis.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
         <div className="grid lg:grid-cols-2 gap-6 mb-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
             <Card className="glass border-pink-500/30 p-6 h-full">
