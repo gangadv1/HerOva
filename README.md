@@ -1,922 +1,860 @@
 # HerOva: Women's Health Diagnostic Platform
 
-A comprehensive web-based diagnostic platform for PCOS (Polycystic Ovary Syndrome) detection and phenotyping. HerOva combines clinical data collection, machine learning-driven analysis, and explainable AI to provide personalized diagnostic insights for women's endocrine health.
+HerOva is a BioHackathon 2026 diagnostic decision-support platform for PCOS-focused women's health workflows. It combines structured patient intake, Rotterdam criteria evaluation, PCOS risk scoring, phenotype classification, explainable AI-style reasoning, body symptom visualization, population CSV screening, session history, and molecular pathway education.
 
-## 🎯 Table of Contents
+The repository contains a Next.js frontend, a FastAPI local analysis backend, optional Supabase Edge Functions, Supabase database migrations, trained model artifacts, and biological validation notebooks.
 
-- [Features Overview](#features-overview)
-- [Getting Started](#getting-started)
-- [Dashboard & Routes](#dashboard--routes)
-- [Feature Descriptions](#feature-descriptions)
-  - [Landing Page](#landing-page)
-  - [Start Analysis (Patient Analysis Form)](#start-analysis-patient-analysis-form)
-  - [Body Visualization](#body-visualization)
-  - [Results Dashboard](#results-dashboard)
-  - [Batch CSV Upload](#batch-csv-upload)
-  - [Sessions Management](#sessions-management)
-  - [Molecular Insights](#molecular-insights)
-- [Technical Architecture](#technical-architecture)
+> Clinical note: HerOva is a hackathon research/demo platform. It is not a replacement for clinician judgment, diagnostic exclusion workups, or regulated medical software.
+
+## Table of Contents
+
+- [Complete Feature Inventory](#complete-feature-inventory)
+- [Application Routes](#application-routes)
+- [Single-Patient Analysis](#single-patient-analysis)
+- [Results Report](#results-report)
+- [Interactive Body Visualization](#interactive-body-visualization)
+- [Population CSV Screening](#population-csv-screening)
+- [Sessions and Persistence](#sessions-and-persistence)
+- [Molecular Insights](#molecular-insights)
+- [Landing and Education](#landing-and-education)
+- [Backend and API Features](#backend-and-api-features)
+- [Supabase Features](#supabase-features)
 - [Data Model](#data-model)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [Clinical Logic](#clinical-logic)
 
----
+## Complete Feature Inventory
 
-## 🚀 Features Overview
+| Area | Feature | Detail |
+| --- | --- | --- |
+| Landing | Hero experience | Brand-forward home page with HerOva identity, clear calls to action, animated visual styling, and route navigation. |
+| Landing | Platform education | Explains the problem space, diagnostic gaps, public health relevance, dataset/training context, technology approach, and phenotype concepts. |
+| Landing | Feature showcase | Highlights clinical AI diagnostics, phenotype discovery, molecular validation, explainable AI, real-world deployability, and diagnostic equity. |
+| Intake | Six-step patient form | Collects demographics, menstrual health, hormonal symptoms, metabolic indicators, ultrasound findings, and lab biomarkers. |
+| Intake | Stepper navigation | Includes progress bar, numbered step indicators, previous/next controls, and clickable step jumps. |
+| Intake | Telehealth mode | Toggleable remote-consultation mode exposed through the `/analysis?mode=telehealth` URL path and header control. |
+| Intake | Auto-calculated measurements | BMI, HOMA-IR, and LH:FSH ratio are calculated from entered values in the form flow and normalized by the API client. |
+| Intake | Typed patient state | Uses a structured `PatientData` object covering more than 30 clinical fields. |
+| Analysis | Local analysis backend | Uses FastAPI at `http://localhost:8001` when Supabase is not configured. |
+| Analysis | Supabase Edge Function mode | Uses deployed Supabase functions when `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are configured. |
+| Analysis | Rotterdam criteria engine | Evaluates hyperandrogenism, ovulatory dysfunction, and polycystic ovarian morphology. |
+| Analysis | Risk scoring | Produces a 0-100 PCOS probability/risk score and low/moderate/high risk band. |
+| Analysis | Phenotype classification | Assigns Type A, B, C, D, unclassified PCOS, or non-PCOS pattern based on criteria combinations. |
+| Analysis | Contributing factors | Lists clinical drivers such as ovulatory dysfunction, hyperandrogenism, PCOM, AMH, LH:FSH ratio, BMI, insulin resistance, and hormonal imbalance. |
+| Analysis | SHAP-style explainability | Returns ranked feature contributions with impact level, direction, and plain-language explanation. |
+| Analysis | Human-readable reasoning | Converts top contributors into readable diagnostic reasoning sentences. |
+| Analysis | Confidence metrics | Reports PCOS classification confidence, phenotype match, and data quality. |
+| Analysis | Suggested investigations | Recommends follow-up investigations such as fasting insulin, pelvic ultrasound, testosterone panel, and reproductive endocrinology referral. |
+| Results | Report summary | Shows PCOS probability, phenotype prediction, AI confidence, clinical interpretation, and diagnostic status. |
+| Results | Rotterdam breakdown | Displays criteria-level evidence and subcriteria for hyperandrogenism, ovulatory dysfunction, and polycystic ovaries. |
+| Results | Differential diagnosis | Compares PCOS with endometriosis and healthy ovarian function probabilities. |
+| Results | Biological pathways | Builds patient-specific pathway activity for insulin signaling, androgen synthesis, ovarian follicle regulation, and inflammatory signaling. |
+| Results | Cellular composition | Estimates granulosa, stromal, theca, immune, and endothelial cell composition in the report view. |
+| Results | Cluster snapshot | Assigns the patient to clusters such as classic metabolic PCOS, reproductive PCOS, hyperandrogenic-PCO, normo-androgenic PCOS, or non-PCOS control. |
+| Results | Body symptom mapping | Embeds the interactive body viewer inside the report using the current patient data and model output. |
+| Results | Save results | Saves the analysis result into the active session for later retrieval. |
+| Body viewer | Standalone route | `/body-visualization` provides a dedicated PCOS symptom explorer. |
+| Body viewer | Interactive hotspots | Clickable hotspots include scalp, face/acne, hirsutism, thyroid, chest, skin folds/arms, abdomen, ovaries, uterus, pelvis, and legs. |
+| Body viewer | Zoom controls | Includes zoom in, zoom out, reset, selected-region focus, and animated detail panel behavior. |
+| Body viewer | Severity states | Each hotspot carries mild/moderate/severe status and related symptoms. |
+| Body viewer | Patient tailoring | `buildSymptomsForPatient` adjusts severity and descriptions from patient data and analysis output. |
+| Body viewer | Report export | The standalone visualization can export a JSON report with timestamp, selected region, patient values, and session data. |
+| Batch screening | CSV upload | `/csv-upload` supports drag-and-drop or file picker upload for `.csv` files. |
+| Batch screening | Sample CSV | Provides an in-app downloadable sample file and supported column list. |
+| Batch screening | Local parser | Parses CSV in-browser, detects comma/semicolon/tab delimiters, handles quoted values, and maps common column variants. |
+| Batch screening | Flexible field mapping | Supports clinical column names for age, height, weight, BMI, cycles, symptoms, AMH, LH, FSH, follicles, blood pressure, waist/hip, lifestyle, pregnancy, vitamin D, and more. |
+| Batch screening | Batch risk scoring | Calculates per-row risk score, risk level, phenotype, factors, and triggered source columns. |
+| Batch screening | Summary cards | Shows total rows, processed patients, PCOS-positive count, high-risk count, moderate-risk count, and low-risk count. |
+| Batch screening | Phenotype distribution | Summarizes Type A, B, C, D, and non-PCOS counts. |
+| Batch screening | Risk heatmap | Displays up to 200 patients as color-coded risk squares. |
+| Batch screening | Referral priority queue | Lists highest-risk patients and supports marking rows as referred. |
+| Batch screening | Per-patient details | Opens row-level detail, generates a full single-patient analysis on demand, and shows clinical/biological summaries. |
+| Batch screening | Batch save | Saves uploaded batch summary, patients, file metadata, and referral state into sessions. |
+| Sessions | Session list | `/sessions` lists saved sessions with timestamps, status badges, age/BMI metadata, and refresh control. |
+| Sessions | Local fallback | Stores sessions in browser `localStorage` under `herova.local.sessions.v1` when Supabase is not configured. |
+| Sessions | Supabase-backed storage | Uses Supabase tables/functions for cloud persistence when environment variables are present. |
+| Sessions | Expandable details | Expands sessions to show batch summaries, phenotype counts, saved risk score, phenotype, risk level, metabolic risk, and contributing factors. |
+| Sessions | Empty and error states | Includes no-session CTA, loading spinner, retry action, setup notice, and graceful failure messaging. |
+| Molecular | UMAP visualization | `/molecular` shows a synthetic UMAP-style single-cell cluster visualization. |
+| Molecular | Cell type legend | Displays granulosa cells, theca cells, stromal cells, immune cells, and endothelial cells with counts and descriptions. |
+| Molecular | Pathway explorer | Clickable pathway cards reveal genes, activity percentage, biological relevance, and clinical meaning. |
+| Molecular | Pathways covered | Chronic low-grade inflammation, insulin signaling, hyperandrogenism/androgen synthesis, and ovarian dysfunction. |
+| UI | Design system | Uses Tailwind CSS, shadcn/Radix primitives, lucide icons, cards, badges, progress bars, dialogs, toasts, and responsive layouts. |
+| UI | Animations | Uses Framer Motion for step transitions, result reveals, upload states, and page section motion. |
+| UI | Branding | Central logo component plus dark/glass visual styling and route-level headers. |
+| Developer | TypeScript API client | `lib/api.ts` normalizes payloads, chooses local vs Supabase backend, parses CSV, stores sessions, and exposes `healthApi`. |
+| Developer | Python API | `backend/main.py` exposes `/analyze` and `/predict` with CORS for the Next.js dev server. |
+| Developer | Clinical rules module | `backend/clinical_rules.py` centralizes Rotterdam criteria evaluation and phenotype mapping. |
+| Developer | Supabase functions | Edge functions exist for analyze, predict, shap, cluster, session, csv-upload, explain, and patient-summary flows. |
+| Developer | Database migration | Creates `patient_sessions` and `analysis_results` tables with RLS policies for authenticated and anonymous demo sessions. |
+| Developer | Model artifacts | Includes `pcos_xgboost_model.joblib`, `differential_diagnosis_model.joblib`, and phenotype result data. |
+| Developer | Validation notebook | Includes `notebooks/Biological_Validation.ipynb` for biological validation work. |
 
-| Feature | Description | Route | Key Capability |
-|---------|-------------|-------|-----------------|
-| **Landing Page** | Homepage with platform intro, features showcase, and educational content | `/` | Hero section with CTA, problem/solution overview |
-| **Start Analysis** | Multi-step patient data collection form | `/analysis` | Capture 30+ clinical parameters across 6 form steps |
-| **Body Visualization** | Interactive PCOS symptom mapping with anatomical hotspots | `/body-visualization` | Click-to-explore regions, download JSON reports |
-| **Results Dashboard** | Comprehensive analysis results with PCOS risk scoring and phenotyping | `/analysis` (after submit) | Risk score, phenotype classification, feature importance, recommendations |
-| **Batch CSV Upload** | Analyze multiple patients from a CSV file in one operation | `/csv-upload` | Drag-and-drop upload, flexible column mapping, batch results aggregation |
-| **Sessions History** | View and manage all past analysis sessions with local/cloud storage | `/sessions` | Browse session history, retrieve past results, persistent data storage |
-| **Molecular Insights** | Deep dive into molecular pathways driving PCOS | `/molecular` | 4 key PCOS pathways, cell type distributions, pathway activity levels |
+## Application Routes
 
----
+| Route | Name | Main Features |
+| --- | --- | --- |
+| `/` | Landing page | Hero, navigation, problem/solution narrative, feature cards, dataset context, technology overview, public health context, phenotype education, CTA. |
+| `/analysis` | Patient analysis | Six-step intake form, telehealth toggle, progress tracking, patient state, analysis submission, results transition. |
+| `/analysis?mode=telehealth` | Telehealth analysis | Same intake/report surface with remote-consultation mode enabled from URL. |
+| `/body-visualization` | Body visualization | Standalone interactive body symptom map, region details, zoom controls, JSON report export. |
+| `/csv-upload` | Population screening | CSV upload, sample download, batch processing, summary cards, phenotype distribution, risk heatmap, referral queue, per-row analysis, save batch. |
+| `/sessions` | Patient sessions | Session history, local/Supabase storage notice, saved result details, batch summaries, refresh, new analysis actions. |
+| `/molecular` | Molecular insights | UMAP cell clustering, cell type counts, dysregulated pathway explorer, gene lists, activity levels. |
 
-## 🛠 Getting Started
+## Single-Patient Analysis
 
-### Installation
+The `/analysis` workflow collects a complete patient profile through six form steps.
+
+### Step 1: Demographics
+
+- Age.
+- Weight.
+- Height.
+- Auto-calculated BMI.
+- Ethnicity.
+
+### Step 2: Menstrual Health
+
+- Cycle length.
+- Cycle length variability.
+- Period duration.
+- Age at menarche.
+- Irregular periods flag.
+- Ovulatory dysfunction signal when cycles are irregular or prolonged.
+
+### Step 3: Hormonal Symptoms
+
+- Acne presence.
+- Acne severity.
+- Hirsutism flag.
+- Ferriman-Gallwey-style hirsutism score.
+- Hair loss.
+- Skin darkening/acanthosis nigricans.
+- Clinical hyperandrogenism signal from symptoms.
+
+### Step 4: Metabolic Indicators
+
+- Fasting glucose.
+- Insulin level.
+- Auto-calculated HOMA-IR.
+- Waist circumference.
+- Systolic blood pressure.
+- Diastolic blood pressure.
+- Insulin resistance and cardiometabolic risk signals.
+
+### Step 5: Ultrasound Findings
+
+- Left ovary volume.
+- Right ovary volume.
+- Left follicle count.
+- Right follicle count.
+- Polycystic appearance.
+- Endometrial thickness.
+- PCOM signal from follicle count, ovary volume, or sonographic appearance.
+
+### Step 6: Lab Biomarkers
+
+- LH.
+- FSH.
+- Auto-calculated LH:FSH ratio.
+- Total testosterone.
+- Free testosterone.
+- DHEAS.
+- AMH.
+- Prolactin.
+- TSH.
+- Biochemical hyperandrogenism, ovarian reserve/follicle pool, and exclusionary mimic signals.
+
+### Form Behavior
+
+- Uses a persistent typed `PatientData` object while users move between steps.
+- Shows a progress bar and current step count.
+- Allows previous/next movement and clickable step navigation.
+- Switches into the results dashboard after the final step.
+- Runs both full analysis and prediction calls through `healthApi`.
+- Creates a session automatically when possible.
+
+## Results Report
+
+The results dashboard is the main clinical interpretation surface after single-patient intake.
+
+### Summary Cards
+
+- PCOS probability from 0-100%.
+- Risk level: low, moderate, or high.
+- Phenotype prediction with type and explanation.
+- AI confidence metrics for PCOS classification, phenotype match, and data quality.
+
+### Rotterdam Evaluation
+
+The report evaluates:
+
+- Hyperandrogenism from acne, hirsutism, hair loss, testosterone, free testosterone, and hirsutism score.
+- Ovulatory dysfunction from cycle irregularity and cycle length.
+- Polycystic ovaries from follicle counts, ovary volumes, and polycystic appearance.
+- Criteria count and whether the diagnostic threshold of at least 2 of 3 criteria is met.
+- Exclusion notes for thyroid and prolactin patterns.
+
+### Explainability
+
+- Ranked SHAP-style feature bars.
+- Impact labels: high, moderate, and low.
+- Direction labels such as increases/neutral.
+- Feature explanations for cycle length, follicle count, LH:FSH ratio, testosterone, HOMA-IR, AMH, hirsutism, BMI, ovary volume, and skin darkening.
+- Human-readable reasoning sentences from backend contributors when available.
+
+### Differential Diagnosis
+
+- Compares PCOS, endometriosis, and healthy ovarian function.
+- Normalizes probabilities to a 100% differential distribution.
+- Describes why each competing diagnosis is being considered.
+
+### Biological Interpretation
+
+- Patient-specific pathway activity for insulin signaling, androgen synthesis, ovarian follicle regulation, and inflammatory signaling.
+- Patient-specific cell architecture across granulosa, stromal, theca, immune, and endothelial cells.
+- A combined clinical interpretation sentence summarizing criteria, phenotype, pathway, cell signal, differential result, and risk score.
+
+### Clustering
+
+- Assigns a cluster snapshot based on current patient signals.
+- Cluster options include classic metabolic PCOS, reproductive PCOS, hyperandrogenic-PCO, normo-androgenic PCOS, and non-PCOS control.
+- Shows characteristics, risk profile, and metabolic risk.
+
+### Recommendations and Next Investigations
+
+- Provides tailored recommendations based on criteria met.
+- Suggests follow-up investigations such as fasting insulin, pelvic ultrasound, testosterone panel, or reproductive endocrinology referral.
+
+### Save Results
+
+- Stores risk score, phenotype, risk level, contributing factors, SHAP values, cluster assignment, confidence metrics, and recommendations into the active session.
+- Works with local browser storage by default and Supabase when configured.
+
+## Interactive Body Visualization
+
+HerOva includes both a standalone body visualization route and an embedded viewer in the results report.
+
+### Standalone Body Viewer
+
+- Route: `/body-visualization`.
+- Interactive anatomical silhouette.
+- Clickable regions with clinical descriptions.
+- Selected-region tracking.
+- Patient age/BMI display when available.
+- JSON report download with timestamp, selected region, patient demographics, and patient data.
+
+### Embedded Results Body Viewer
+
+- Uses `InteractiveBodyViewer`.
+- Builds patient-specific symptoms with `buildSymptomsForPatient`.
+- Adjusts descriptions with patient values such as age, BMI, cycle length, AMH, TSH, testosterone, and follicle counts.
+- Adds analysis-aware notes when Rotterdam ovarian morphology or human reasoning is present.
+
+### Hotspots and Regions
+
+- Scalp and hair loss.
+- Face acne.
+- Hirsutism.
+- Thyroid region.
+- Chest/breast symptoms.
+- Skin folds and acanthosis nigricans.
+- Abdomen and central adiposity.
+- Left ovary.
+- Right ovary.
+- Uterus and menstrual irregularity.
+- Pelvic region.
+- Legs/lower-body hirsutism.
+
+### Viewer Controls
+
+- Click hotspot to zoom to the relevant anatomical area.
+- Zoom in.
+- Zoom out.
+- Reset view.
+- Hover and selection states.
+- Severity badges.
+- Related symptom lists.
+
+## Population CSV Screening
+
+The `/csv-upload` route is designed for clinic, camp, or population-level screening.
+
+### Upload Features
+
+- Drag-and-drop CSV upload.
+- Click-to-browse file input.
+- CSV-only validation.
+- File size display.
+- Remove/reset selected file.
+- Processing spinner and user-friendly errors.
+- Downloadable sample CSV.
+
+### Supported CSV Data
+
+The parser accepts common columns and variants, including:
+
+- Age, weight, height, and BMI.
+- Cycle regularity and cycle length.
+- Acne, hirsutism/hair growth, skin darkening, hair loss, weight gain.
+- AMH, LH, FSH, FSH/LH ratio.
+- Follicle counts left/right.
+- Average follicle sizes left/right.
+- Endometrial thickness.
+- Blood pressure systolic/diastolic.
+- Waist, hip, and waist:hip ratio.
+- Fasting/random blood glucose.
+- Prolactin, TSH, vitamin D3, progesterone.
+- Pulse rate, respiratory rate, blood group, pregnancy status, abortions, beta-HCG values.
+- Fast food intake and regular exercise.
+
+### Batch Processing
+
+- Parses CSV text locally.
+- Detects delimiter from comma, semicolon, or tab.
+- Handles quoted values.
+- Normalizes numeric and boolean values.
+- Builds patient objects for every row.
+- Scores each patient locally.
+- Assigns low/moderate/high risk.
+- Determines Type A/B/C/D/NA phenotype.
+- Tracks triggered source columns so clinicians can see why a row was flagged.
+
+### Batch Results
+
+- Summary cards for total rows, PCOS-positive count, high-risk count, moderate-risk count, and low-risk count.
+- Phenotype distribution cards for Type A, B, C, D, and non-PCOS.
+- Risk heatmap showing up to 200 patients as color-coded squares.
+- Patient results table with row, score, level, phenotype, triggers, and actions.
+- High-risk referral priority queue sorted by risk score.
+- Referred badge state after review.
+- On-demand full single-patient analysis for a selected row.
+- Batch-specific pathway insights and differential diagnosis in row details.
+
+### Batch Persistence
+
+- Saves source metadata, file name, total rows, processed rows, PCOS-positive count, batch summary, patient rows, referral row IDs, and referral patient objects.
+- Saved batch sessions appear on `/sessions`.
+
+## Sessions and Persistence
+
+HerOva supports browser-local sessions and optional Supabase-backed persistence.
+
+### Local Sessions
+
+- Used automatically when Supabase variables are not configured.
+- Stored in browser localStorage.
+- Storage key: `herova.local.sessions.v1`.
+- Supports session create, list, retrieve, and result save behavior.
+- Useful for demo and local development with no database setup.
+
+### Supabase Sessions
+
+- Enabled by setting `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- Uses Supabase functions under `/functions/v1`.
+- Database tables are created by `supabase/migrations/20260516055037_create_patient_sessions_and_results.sql`.
+- Row-level security policies support authenticated users and anonymous demo sessions.
+
+### Sessions Page
+
+- Lists session ID prefix, status, date/time, age, and BMI.
+- Shows active/completed/archived badges.
+- Provides refresh control.
+- Shows setup notice when using local browser sessions.
+- Empty state links to new analysis.
+- Quick actions link to new analysis and CSV upload.
+- Expands single-patient sessions to show saved analysis results.
+- Expands batch sessions to show totals and phenotype distribution.
+
+## Molecular Insights
+
+The `/molecular` page is an education and research interpretation view.
+
+### Single-Cell UMAP
+
+- Synthetic UMAP-style visualization of ovarian single-cell transcriptomes.
+- Clustered points for major cell populations.
+- Axis labels for UMAP 1 and UMAP 2.
+
+### Cell Types
+
+- Granulosa cells: estrogen-producing follicular support cells.
+- Theca cells: androgen-producing ovarian stromal cells.
+- Stromal cells: structural/supportive ovarian architecture.
+- Immune cells: inflammatory mediators in ovarian tissue.
+- Endothelial cells: blood vessel lining and perfusion support.
+
+### Molecular Pathways
+
+- Chronic low-grade inflammation: IL-6, TNF-alpha, CRP, NF-kB; 75% activity.
+- Insulin signaling: INSR, IRS-1, PI3K, AKT; 82% activity.
+- Hyperandrogenism pathway: CYP17A1, CYP11A1, StAR, 3 beta-HSD; 68% activity.
+- Ovarian dysfunction: AMH, FSHR, LHCGR, BMP15; 71% activity.
+
+### Pathway Interaction
+
+- Users select pathway cards.
+- The selected pathway shows activity, genes, description, and relevance.
+- Visual styling differentiates pathway families with color.
+
+## Developer Quick Start
+
+Follow these steps to get the full frontend + local backend experience for development and testing.
+
+1. Frontend (Next.js)
 
 ```bash
-# Navigate to frontend directory
-cd /path/to/BioHackathon2026/frontend
+cd women-s-health-diagnostic-platform
+npm install
+npm run dev
+```
 
-# Install Python dependencies
+Open `http://localhost:3000` in a browser.
+
+2. Optional backend model server (FastAPI)
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+The local model server listens on port `8001` by default and is used automatically by the frontend when Supabase is not configured.
+
+3. Environment variables
+
+- Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` to use Supabase-backed persistence and edge functions.
+- If not set, the app uses local fallbacks and `localStorage` under `herova.local.sessions.v1`.
+
+## Batch Upload — "Review & Refer" Behavior
+
+- The `/csv-upload` route exposes a batch workflow with per-row details and a referral queue.
+- Clicking a row opens the same `ResultsDashboard` component used by the single-patient analysis page, ensuring feature parity for:
+  - PCOS Probability, Phenotype Prediction, AI Confidence
+  - Interactive Body Visualization
+  - Rotterdam Criteria Evaluation
+  - Differential Diagnosis
+  - Metabolic Subtype
+  - SHAP Feature Contribution
+  - Clinical Recommendations
+  - Molecular Pathway Activity
+  - Ovarian Cellular Architecture
+- Use the "Send to Referral Queue" button to mark a patient as referred. Referral state is persisted to Supabase when configured, otherwise saved to `localStorage`.
+
+Troubleshooting:
+
+- If the refer action fails, open DevTools → Console and Network. Look for failed requests to `/functions/v1/session` or the local model at `http://localhost:8001`.
+- Common causes: missing env vars, CORS rules, or a backend process not running.
+
+## Committing & Pushing Changes
+
+Basic git workflow used by this project:
+
+```bash
+git checkout -b feat/update-readme
+git add -A
+git commit -m "docs: update README with detailed features and dev quick-start"
+git push origin HEAD
+```
+
+If `git push` fails due to authentication, verify your local Git remote and credentials (SSH key or credential manager).
+
+## Recent Changes
+
+- Embedded `ResultsDashboard` into the batch upload per-row modal to ensure the batch single-patient view matches the single-patient analysis layout exactly.
+- Fixed UI rendering issues and improved safety checks in the batch modal.
+
+## Contact & Support
+
+If you need help reproducing a bug or running the app locally, open an issue or reach out to the maintainers with console logs and network traces for the failing action.
+
+---
+Updated README: adds quick-start steps, batch refer troubleshooting, and commit/push guidance.
+
+## Landing and Education
+
+The landing page is a guided introduction to the product and problem space.
+
+### Included Sections
+
+- Navigation and HerOva brand/logo.
+- Hero section with primary route CTA.
+- Problem section covering the women's health diagnostic gap.
+- Feature section for clinical AI diagnostics, phenotype discovery, molecular validation, explainable AI, implementation practicality, and equity.
+- Dataset section describing the data and model context.
+- Technology section describing XGBoost-style prediction, SHAP-style explainability, clustering, and molecular analysis.
+- Public health section explaining impact.
+- Phenotype education cards.
+- CTA section.
+- Particle background and animated visual elements.
+
+## Backend and API Features
+
+### FastAPI Backend
+
+The local backend lives in `backend/`.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/analyze` | Full analysis response with score, phenotype, Rotterdam output, SHAP-style values, reasoning, body highlights, investigations, clustering, confidence, recommendations, and timestamp. |
+| `POST` | `/predict` | Lightweight prediction using the Rotterdam criteria engine. |
+
+### `/analyze` Response Features
+
+- `success`.
+- `prediction.pcosRiskScore`.
+- `prediction.riskLevel`.
+- `prediction.contributingFactors`.
+- `phenotype.type`, `phenotype.name`, and `phenotype.description`.
+- `phenotypeDisplay`.
+- `rotterdamEvaluation`.
+- `shap.values` and `shap.topContributors`.
+- `humanReasoning`.
+- `bodyHighlights`.
+- `suggestedInvestigations`.
+- `clustering`.
+- `confidenceMetrics`.
+- `recommendations`.
+- `timestamp`.
+
+### API Client
+
+The frontend API client in `women-s-health-diagnostic-platform/lib/api.ts` provides:
+
+- Environment detection for Supabase and local backend mode.
+- `healthApi.analyze`.
+- `healthApi.predict`.
+- CSV upload parsing and local batch result generation.
+- Session create/list/get/save behavior.
+- Payload normalization into backend-compatible clinical column names.
+- Local session read/write/upsert.
+
+## Supabase Features
+
+Supabase support is optional but included.
+
+### Edge Function Areas
+
+- `analyze`.
+- `predict`.
+- `shap`.
+- `cluster`.
+- `session`.
+- `csv-upload`.
+- `explain`.
+- `patient-summary`.
+
+### Database Tables
+
+`patient_sessions`:
+
+- `id`.
+- `created_at`.
+- `patient_data`.
+- `csv_data`.
+- `status`.
+- `user_id`.
+
+`analysis_results`:
+
+- `id`.
+- `session_id`.
+- `created_at`.
+- `pcos_risk_score`.
+- `phenotype`.
+- `phenotype_name`.
+- `phenotype_description`.
+- `risk_level`.
+- `contributing_factors`.
+- `shap_values`.
+- `cluster_assignment`.
+- `confidence_metrics`.
+- `recommendations`.
+
+### Security
+
+- RLS enabled for both tables.
+- Authenticated users can access their own sessions/results.
+- Anonymous demo sessions are allowed when `user_id` is null.
+- Result access is scoped through the parent session.
+
+## Data Model
+
+### PatientData
+
+```ts
+type PatientData = {
+  age: number
+  weight: number
+  height: number
+  bmi: number
+  ethnicity: string
+  cycleLength: number
+  cycleLengthVariability: string
+  periodDuration: number
+  ageAtMenarche: number
+  irregularPeriods: boolean
+  acne: boolean
+  acneSeverity: string
+  hirsutism: boolean
+  hirsutismScore: number
+  hairLoss: boolean
+  skinDarkening: boolean
+  fastingGlucose: number
+  insulinLevel: number
+  homaIr: number
+  waistCircumference: number
+  bloodPressureSystolic: number
+  bloodPressureDiastolic: number
+  ovaryVolumeLeft: number
+  ovaryVolumeRight: number
+  follicleCountLeft: number
+  follicleCountRight: number
+  polycysticAppearance: boolean
+  endometrialThickness: number
+  lh: number
+  fsh: number
+  lhFshRatio: number
+  totalTestosterone: number
+  freeTestosterone: number
+  dheas: number
+  amh: number
+  prolactin: number
+  tsh: number
+}
+```
+
+### Full Analysis Result
+
+```ts
+type FullAnalysisResult = {
+  success: boolean
+  prediction: {
+    pcosRiskScore: number
+    riskLevel: "low" | "moderate" | "high"
+    contributingFactors: string[]
+  }
+  phenotype: {
+    type: string
+    name: string
+    description: string
+  }
+  phenotypeDisplay?: {
+    displayName: string
+    type: string
+    characteristics: string[]
+  }
+  rotterdamEvaluation: unknown
+  shap: {
+    values: Array<Record<string, unknown>>
+    topContributors: Array<Record<string, unknown>>
+  }
+  humanReasoning?: string[]
+  bodyHighlights?: Record<string, boolean>
+  suggestedInvestigations?: string[]
+  clustering?: Record<string, unknown>
+  confidenceMetrics: {
+    pcosClassification: number
+    phenotypeMatch: number
+    dataQuality: number
+  }
+  recommendations: string[]
+  timestamp: string
+}
+```
+
+### CSV Upload Result
+
+```ts
+type CSVUploadResult = {
+  success: boolean
+  summary: {
+    totalRows: number
+    processedPatients: number
+    pcosPositive: number
+    highRisk: number
+    moderateRisk: number
+    lowRisk: number
+    phenotypeDistribution: Record<string, number>
+  }
+  patients: Array<{
+    rowId: number
+    patientData: Record<string, unknown>
+    riskScore: number
+    riskLevel: "low" | "moderate" | "high"
+    phenotype: string
+    phenotypeName: string
+    factors: string[]
+    triggeredColumns: string[]
+  }>
+  timestamp: string
+}
+```
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js compatible with Next.js 16.
+- Python 3.13 or compatible Python 3.x environment for the FastAPI backend.
+- Optional Supabase project for cloud persistence and Edge Functions.
+
+### Install Backend Dependencies
+
+```bash
+cd /path/to/BioHackathon2026/frontend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
+```
 
-# Install Node.js dependencies
-cd women-s-health-diagnostic-platform
+### Install Frontend Dependencies
+
+```bash
+cd /path/to/BioHackathon2026/frontend/women-s-health-diagnostic-platform
 npm install
 ```
 
-### Running Locally
+### Run Local Backend
 
-**Terminal 1: Start the backend (FastAPI + uvicorn on port 8001)**
 ```bash
 cd /path/to/BioHackathon2026/frontend
 source .venv/bin/activate
 PYTHONPATH=$(pwd) python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8001
 ```
 
-**Terminal 2: Start the frontend (Next.js dev server on port 3000)**
+### Run Frontend
+
 ```bash
-cd women-s-health-diagnostic-platform
+cd /path/to/BioHackathon2026/frontend/women-s-health-diagnostic-platform
 npm run dev
 ```
 
-Then open **http://localhost:3000** in your browser.
+Open `http://localhost:3000`.
 
-### Building for Production
+### Build Frontend
 
 ```bash
-cd women-s-health-diagnostic-platform
-npm run build
-```
-
----
-
-## 📍 Dashboard & Routes
-
-The platform is organized into distinct routes, each providing a specific workflow:
-
-### Main Routes
-
-| Route | Page | Purpose |
-|-------|------|---------|
-| `/` | **Landing Page** | Introduction, features showcase, educational content |
-| `/analysis` | **Patient Analysis** | Multi-step form for single-patient diagnosis |
-| `/body-visualization` | **Body Visualization** | Interactive PCOS symptom explorer |
-| `/csv-upload` | **Batch Upload** | Multi-patient CSV analysis |
-| `/molecular` | **Molecular Insights** | PCOS molecular pathways and biology |
-| `/sessions` | **Sessions History** | View and manage past analyses |
-| `/dashboard` | **Dashboard** | (Placeholder for future analytics) |
-
----
-
-## 🎨 Feature Descriptions
-
-### Landing Page (`/`)
-
-**Purpose:** Introduce the platform and guide users to start their analysis.
-
-**Components:**
-- **Hero Section** — Eye-catching header with main CTA ("Start Analysis")
-- **Navigation Bar** — Logo, links to sections, and branding
-- **Problem Section** — Describes the global PCOS burden (10-20% of women affected)
-- **Feature Section** — Highlights key platform capabilities
-- **Dataset Section** — Information about the clinical datasets used for training
-- **Technology Section** — Overview of ML/AI techniques (XGBoost, SHAP, clustering)
-- **Public Health Section** — Clinical significance and research context
-- **Educational Content** — Phenotype cards explaining 4 PCOS types (A, B, C, D)
-- **Animated Elements** — Particle background and flying butterfly decorations
-- **CTA Section** — Final call-to-action to begin analysis
-
-**Design:** Modern, accessible UI with Tailwind CSS, glassmorphism effects, responsive layout.
-
----
-
-### Start Analysis (Patient Analysis Form) (`/analysis`)
-
-**Purpose:** Collect comprehensive clinical data for PCOS diagnosis through an intuitive multi-step form.
-
-**Key Features:**
-- **6-Step Form Wizard** with progress tracking
-- **Step Navigation** — Previous/Next buttons, skip-ahead option
-- **Progress Bar** — Visual indication of form completion
-- **Automatic Calculations** — BMI, HOMA-IR, LH:FSH ratio computed on input
-- **Input Validation** — Real-time feedback for out-of-range values
-- **Results Display** — Automatic transition to results dashboard after submission
-
-#### Form Steps (6 Total)
-
-##### **Step 1: Demographics**
-Input fields:
-- **Age** — Slider (18–50 years)
-- **Weight** — Slider (40–150 kg)
-- **Height** — Slider (140–200 cm)
-- **BMI** — Auto-calculated, color-coded (Green: <25 normal, Yellow: 25-30 overweight, Orange: >30 obese)
-- **Ethnicity** — Dropdown (7 options: Asian, Caucasian, African, Hispanic, Middle Eastern, South Asian, Other)
-
-##### **Step 2: Menstrual Health**
-Input fields:
-- **Cycle Length** — Numeric input (21–90 days, default 28)
-- **Cycle Regularity** — Toggle (Regular / Irregular)
-- **Cycle Variability** — Numeric input for variation (0–20 days)
-- **Period Duration** — Numeric input (1–7 days)
-- **Age at Menarche** — Numeric input (8–18 years)
-
-*Clinical Note:* Oligomenorrhea (>35 days) or high variability suggests ovulatory dysfunction, a key PCOS criterion.
-
-##### **Step 3: Hormonal Symptoms**
-Input fields:
-- **Acne** — Toggle with severity selector (None / Mild / Moderate / Severe)
-- **Hirsutism Score** — Slider (0–36, based on Ferriman-Gallwey scale)
-- **Hair Loss** — Toggle (Yes / No)
-- **Skin Darkening (Acanthosis Nigricans)** — Toggle (Yes / No)
-
-*Clinical Note:* These signs indicate clinical hyperandrogenism, a core PCOS criterion.
-
-##### **Step 4: Metabolic Indicators**
-Input fields:
-- **Fasting Glucose** — Numeric input (70–200 mg/dL)
-- **Fasting Insulin** — Numeric input (0–30 µIU/mL)
-- **HOMA-IR** — Auto-calculated [(Glucose × Insulin) / 405]
-- **Waist Circumference** — Numeric input (60–120 cm)
-- **Blood Pressure (Systolic)** — Numeric input (80–180 mmHg)
-- **Blood Pressure (Diastolic)** — Numeric input (50–120 mmHg)
-
-*Clinical Note:* Insulin resistance (HOMA-IR >2.5) is common in PCOS and affects metabolic phenotype.
-
-##### **Step 5: Ultrasound Findings**
-Input fields:
-- **Left Ovary Volume** — Numeric input (0–50 mL)
-- **Right Ovary Volume** — Numeric input (0–50 mL)
-- **Left Follicle Count** — Numeric input (0–30)
-- **Right Follicle Count** — Numeric input (0–30)
-- **Polycystic Appearance** — Toggle (Yes / No)
-- **Endometrial Thickness** — Numeric input (5–20 mm)
-
-*Clinical Note:* Polycystic ovarian morphology (≥12 follicles or volume >10 mL) is one of 3 Rotterdam criteria.
-
-##### **Step 6: Lab Biomarkers**
-Input fields:
-- **LH (Luteinizing Hormone)** — Numeric input (0–50 mIU/mL)
-- **FSH (Follicle Stimulating Hormone)** — Numeric input (0–30 mIU/mL)
-- **LH:FSH Ratio** — Auto-calculated
-- **Total Testosterone** — Numeric input (0–100 ng/dL)
-- **Free Testosterone** — Numeric input (0–10 pg/mL)
-- **DHEAS (Dehydroepiandrosterone)** — Numeric input (0–500 µg/dL)
-- **AMH (Anti-Müllerian Hormone)** — Numeric input (0–15 ng/mL)
-- **Prolactin** — Numeric input (0–30 ng/mL)
-- **TSH (Thyroid Stimulating Hormone)** — Numeric input (0–10 mIU/L)
-
-*Clinical Note:* Biochemical hyperandrogenism (elevated testosterone, DHEAS) and elevated LH:FSH ratio are key diagnostic markers.
-
-**Form Behavior:**
-- Submit triggers analysis request to backend `/analyze` endpoint
-- Patient data is sent as PatientData JSON object
-- Loading spinner shown during analysis (typically 2–5 seconds)
-- Results dashboard automatically loads with PCOS diagnosis
-
----
-
-### Body Visualization (`/body-visualization`)
-
-**Purpose:** Provide an interactive, educational exploration of PCOS symptoms mapped to anatomy.
-
-**Key Features:**
-- **Interactive SVG Silhouette** — Click to highlight body regions
-- **7 Anatomical Regions** — Each mapped to specific PCOS manifestations
-- **Selected Region Tracking** — Visual feedback shows which region is active
-- **Patient Data Display** — Age and BMI shown if available
-- **Download Report Button** — Export session data as JSON file
-
-#### Interactive Regions
-
-1. **Scalp & Hair**
-   - Manifestation: Androgenic alopecia, diffuse hair thinning
-   - Clinical Indicator: DHT-sensitive follicle miniaturization
-   - Display Color: Yellow highlight when selected
-
-2. **Face / Acne**
-   - Manifestation: Hormonal acne (jawline, chin, perioral)
-   - Clinical Indicator: Sebaceous gland hyperactivity from androgens
-   - Display Color: Orange highlight when selected
-
-3. **Hirsutism Areas** (upper lip, chin, sideburns)
-   - Manifestation: Excess terminal hair growth (Ferriman-Gallwey score)
-   - Clinical Indicator: Clinical hyperandrogenism
-   - Display Color: Purple highlight when selected
-
-4. **Thyroid**
-   - Manifestation: Hypothyroidism/thyroid autoimmunity
-   - Clinical Indicator: TSH >2.5 mIU/L or positive TPO antibodies
-   - Display Color: Cyan highlight when selected
-
-5. **Abdomen / Central Adiposity**
-   - Manifestation: Visceral fat accumulation, abdominal obesity
-   - Clinical Indicator: Waist-to-hip ratio >0.85, elevated waist circumference
-   - Display Color: Blue highlight when selected
-
-6. **Left Ovary**
-   - Manifestation: Polycystic morphology, follicle accumulation
-   - Clinical Indicator: ≥12 follicles (2–9 mm), volume >10 mL
-   - Display Color: Yellow highlight when selected
-
-7. **Right Ovary**
-   - Manifestation: Polycystic morphology, follicle accumulation
-   - Clinical Indicator: ≥12 follicles (2–9 mm), volume >10 mL
-   - Display Color: Yellow highlight when selected
-
-**Download Report Feature:**
-- Clicking "Download Report" exports a JSON file containing:
-  - Session timestamp
-  - Selected anatomical region (if any)
-  - Patient demographic data (age, BMI)
-  - Full PatientData object
-- File named `herova-report-YYYY-MM-DDTHH-MM-SS.json`
-- Useful for medical record integration or clinical reference
-
-**UI Components:**
-- Lightweight SVG (no heavy graphics libraries, Turbopack-safe)
-- Responsive scaling
-- Accessible (role="img", aria-labels)
-- Tailwind CSS styling with glass effect
-
----
-
-### Results Dashboard (`/analysis` → Results View)
-
-**Purpose:** Display comprehensive analysis results with PCOS diagnosis, risk scoring, and personalized recommendations.
-
-**Key Display Sections:**
-
-#### 1. **PCOS Risk Score & Summary**
-- **Score Range:** 0–100 (higher = greater PCOS likelihood)
-- **Risk Level Classification:**
-  - 0–35: Low risk
-  - 36–70: Moderate risk
-  - 71–100: High risk
-- **Phenotype Classification:** One of 4 types (A, B, C, D)
-- **Phenotype Description:** Clinical summary of the diagnosed phenotype
-
-#### 2. **Phenotype Breakdown (4 Rotterdam Types)**
-
-**Type A: Classic PCOS (Hyperandrogenism + Ovulatory Dysfunction + PCOM)**
-- Most common (40–50% of PCOS cases)
-- Clinical features: High androgens, irregular periods, polycystic ovaries
-- Metabolic risk: Highest IR prevalence
-- Fertility: Anovulation common
-
-**Type B: Non-PCO PCOS (Hyperandrogenism + Ovulatory Dysfunction)**
-- 20–30% of PCOS cases
-- Clinical features: High androgens, irregular periods, normal ovaries
-- Metabolic risk: Moderate IR
-- Fertility: Anovulation common
-
-**Type C: Non-Hyperandrogenic PCOS (Polycystic Ovaries + Ovulatory Dysfunction)**
-- 10–15% of PCOS cases
-- Clinical features: Normal androgens, irregular periods, polycystic ovaries
-- Metabolic risk: Lower IR than Type A
-- Fertility: Anovulation common
-
-**Type D: Lean/Normo-Androgenic PCOS (PCOM + Ovulatory Dysfunction)**
-- 5–15% of PCOS cases
-- Clinical features: Normal androgens, normal cycles, polycystic ovaries
-- Metabolic risk: Lowest IR
-- Fertility: Often preserved
-
-#### 3. **Rotterdam Criteria Evaluation**
-Display of which diagnostic criteria were met:
-- ✓ **Hyperandrogenism** (Clinical or Biochemical)
-- ✓ **Ovulatory Dysfunction** (Oligomenorrhea or anovulation)
-- ✓ **Polycystic Ovarian Morphology** (Ultrasound findings)
-
-Diagnosis: ≥2 of 3 criteria met = PCOS positive
-
-#### 4. **Contributing Factors (SHAP-based Feature Importance)**
-Top 10 factors ranked by impact:
-1. **Cycle Length** (>35 days) — Impact: 0.85
-2. **Follicle Count** (≥12 per ovary) — Impact: 0.75
-3. **LH:FSH Ratio** (>2) — Impact: 0.70
-4. **Total Testosterone** (>50 ng/dL) — Impact: 0.65
-5. **HOMA-IR** (>2.5) — Impact: 0.60
-6. **Ovarian Volume** (>10 mL) — Impact: 0.60
-7. **AMH Level** (>6 ng/mL) — Impact: 0.55
-8. **Hirsutism Score** (>8) — Impact: 0.50
-9. **BMI** (>25) — Impact: 0.40
-10. **Skin Darkening** (Present) — Impact: 0.35
-
-Each factor shows:
-- Direction: Increases / Neutral risk
-- Relative importance score
-- Patient-specific value
-- Clinical threshold
-
-#### 5. **Confidence Metrics**
-Overall prediction confidence scores:
-- **PCOS Classification Confidence:** 85–95%
-- **Phenotype Classification Confidence:** 80–90%
-- **Diagnostic Certainty:** High / Moderate / Low
-
-#### 6. **Personalized Recommendations**
-Tailored clinical recommendations based on phenotype:
-- **Lifestyle Modifications** — Diet, exercise, weight management
-- **Diagnostic Follow-ups** — Additional tests to confirm diagnosis
-- **Treatment Options** — Pharmacological and non-pharmacological approaches
-- **Monitoring Plan** — Frequency of follow-ups and metrics to track
-- **Specialist Referral** — Recommended specialists (Endocrinologist, Reproductive, etc.)
-
-#### 7. **Save to Session**
-- "Save Results" button persists analysis to local storage or Supabase
-- Generates unique session ID
-- Enables retrieval from Sessions page
-
-**UI Features:**
-- Loading spinner during analysis
-- Error handling with user-friendly messages
-- Responsive layout for desktop and mobile
-- Export/Download options for report sharing
-- Color-coded risk indicators
-
----
-
-### Batch CSV Upload (`/csv-upload`)
-
-**Purpose:** Analyze multiple patients from a CSV file in a single batch operation.
-
-**Key Features:**
-- **Drag-and-Drop Upload** — Click or drag CSV file into zone
-- **Flexible Column Mapping** — Auto-detects common column name variations
-- **Batch Processing** — Analyze 10s to 1000s of patients efficiently
-- **Results Aggregation** — Summary statistics and detailed per-patient results
-- **Export Functionality** — Download results as CSV or JSON
-
-#### Upload Interface
-- Large drop zone with upload icon
-- Visual feedback (hover effects, drag-over state)
-- File validation (CSV format check)
-- Click-to-browse file picker
-
-#### CSV Column Mapping
-The system auto-detects these column variations (case-insensitive):
-
-| Data Field | Accepted Column Names |
-|------------|----------------------|
-| Age | "Age", "age", "Patient Age", "pt_age" |
-| Weight | "Weight (Kg)", "Weight(kg)", "weight_kg", "Weight" |
-| Height | "Height (cm)", "Height(cm)", "height_cm", "Height" |
-| Ethnicity | "Ethnicity", "Race", "Ethn" |
-| Cycle Length | "Cycle length(days)", "Cycle_length", "cycle" |
-| Irregular Periods | "Irregular periods", "Irregular_cycles", "Irregularity" |
-| Acne | "Acne", "acne_present", "has_acne" |
-| Hirsutism Score | "Hirsutism", "Hirsutism_score", "ferriman" |
-| Hair Loss | "Hair loss", "alopecia", "hair_loss" |
-| Fasting Glucose | "Fasting glucose", "FG", "RBS(mg/dl)" |
-| Fasting Insulin | "Fasting insulin", "insulin", "FI" |
-| Testosterone | "Testosterone", "Total testosterone", "T" |
-| LH | "LH", "lh_level" |
-| FSH | "FSH", "fsh_level" |
-| Left Ovary Volume | "Left ovary volume", "L_ovary_vol" |
-| Right Ovary Volume | "Right ovary volume", "R_ovary_vol" |
-| Left Follicle Count | "Left follicle count", "L_follicles" |
-| Right Follicle Count | "Right follicle count", "R_follicles" |
-
-Boolean fields accept: `Y`, `yes`, `true`, `I`, `irregular` (case-insensitive)
-
-#### Processing Pipeline
-1. **File Parse** — Automatic delimiter detection (comma, semicolon, tab)
-2. **Header Detection** — Identifies column headers
-3. **Field Extraction** — Maps columns to PatientData fields
-4. **Validation** — Type checking, range validation
-5. **Analysis** — Runs predict logic for each row
-6. **Triggered Markers Identification** — Flags which clinical thresholds were exceeded
-7. **Aggregation** — Summarizes results by phenotype, risk level, etc.
-
-#### Results Display
-- **Summary Statistics**
-  - Total patients processed
-  - PCOS-positive cases
-  - Breakdown by risk level (low/moderate/high)
-  - Breakdown by phenotype (Type A/B/C/D)
-
-- **Results Table**
-  - One row per patient
-  - Columns: Patient ID / Name, Age, PCOS Risk Score, Phenotype, Risk Level
-  - Expandable rows showing:
-    - Full PatientData
-    - Triggered clinical markers
-    - Contributing factors
-    - Recommendations
-
-- **Export Options**
-  - Download as CSV
-  - Download as JSON
-  - Email results (if configured)
-
-#### Error Handling
-- **Invalid CSV Format** — User-friendly error message with suggestions
-- **Missing Required Fields** — Allows continuation with warnings
-- **Out-of-Range Values** — Auto-clamps to valid ranges with notification
-- **Empty File** — Clear error feedback
-
----
-
-### Sessions Management (`/sessions`)
-
-**Purpose:** Provide persistent storage and history of all patient analyses.
-
-**Key Features:**
-- **Session List** — Chronological view of all analyses
-- **Session Details** — Retrieve full patient data and results
-- **Local & Cloud Storage** — Browser localStorage by default, optional Supabase sync
-- **Session Metadata** — Timestamps, status, patient identifiers
-- **Bulk Operations** — Export, archive, delete sessions
-
-#### Session Storage
-
-**Local Storage (Default)**
-- Storage Key: `herova.local.sessions.v1`
-- Format: JSON array of SessionResult objects
-- Persists across browser sessions
-- No server required
-- Limited to ~5MB per domain
-
-**Cloud Storage (Supabase)**
-- Requires Supabase configuration (`.env.local`)
-- Tables: `patient_sessions`, `analysis_results`
-- Syncs automatically when configured
-- Enables cross-device access
-- Scales to unlimited sessions
-
-#### Session Structure
-
-```json
-{
-  "id": "uuid-here",
-  "created_at": "2026-05-19T10:30:00Z",
-  "status": "completed",
-  "patientData": { /* 30+ clinical fields */ },
-  "result": {
-    "prediction": { /* Full analysis result */ },
-    "phenotype": "Type A",
-    "pcosRiskScore": 85,
-    "riskLevel": "high",
-    "Rotterdam": { /* Criteria evaluation */ },
-    "confidenceMetrics": { /* Scores */ },
-    "recommendations": [ /* Clinical advice */ ]
-  }
-}
-```
-
-#### Sessions Page Interface
-- **List View** — Table with columns: Date, Patient Name/ID, PCOS Risk, Phenotype, Status
-- **Search & Filter** — By date range, risk level, phenotype
-- **Action Buttons:**
-  - **View** — Opens session details
-  - **Export** — Downloads session as JSON/PDF
-  - **Archive** — Moves to archived sessions
-  - **Delete** — Permanently removes session (with confirmation)
-- **Bulk Select** — Multi-select for batch operations
-
-#### Session Details View
-- Full patient demographics
-- Complete analysis results
-- Risk score visualization
-- Phenotype information
-- Contributing factors breakdown
-- Recommendations
-- Download/Print options
-
-#### Session Operations
-- **Create** — Automatically created when analysis is saved
-- **Retrieve** — Load session from history
-- **Update** — Modify session data or results
-- **Archive** — Move to inactive sessions
-- **Delete** — Remove from storage
-
----
-
-### Molecular Insights (`/molecular`)
-
-**Purpose:** Deep dive into the molecular biology of PCOS for research and education.
-
-**Key Features:**
-- **4 Key Molecular Pathways** — Visual representation with activity levels
-- **5 Cell Type Distribution** — Breakdown of cell populations
-- **Pathway Activity Metrics** — Percentage activation for each pathway
-- **Gene-Level Details** — Key genes involved in each pathway
-- **Educational Content** — Explanations for clinicians and researchers
-
-#### PCOS Molecular Pathways
-
-**Pathway 1: Chronic Low-Grade Inflammation**
-- **Activity Level:** 75% (high)
-- **Key Genes/Markers:**
-  - IL-6 (Interleukin-6) — Pro-inflammatory cytokine
-  - TNF-α (Tumor Necrosis Factor-alpha) — Pro-inflammatory cytokine
-  - CRP (C-Reactive Protein) — Systemic inflammation marker
-  - NF-κB (Nuclear Factor Kappa B) — Transcription factor, inflammatory signaling
-- **Clinical Relevance:** Elevated systemic inflammation, linked to insulin resistance and atherosclerosis risk
-- **Therapeutic Target:** Anti-inflammatory interventions (inositol, metformin, lifestyle)
-
-**Pathway 2: Insulin Signaling Pathway**
-- **Activity Level:** 82% (very high)
-- **Key Genes/Proteins:**
-  - INSR (Insulin Receptor) — Cell surface receptor
-  - IRS-1 (Insulin Receptor Substrate-1) — Signal transduction
-  - PI3K (Phosphoinositide 3-Kinase) — Key signaling enzyme
-  - AKT (Protein Kinase B) — Downstream effector
-- **Clinical Relevance:** Insulin resistance (IR) in 50–70% of PCOS, impairs glucose uptake
-- **Therapeutic Target:** Insulin-sensitizing agents (metformin, thiazolidinediones, GLP-1 agonists)
-
-**Pathway 3: Hyperandrogenism Pathway (Androgen Synthesis)**
-- **Activity Level:** 68% (moderate-high)
-- **Key Genes/Enzymes:**
-  - CYP17A1 (17-alpha hydroxylase) — Upstream of androgens
-  - CYP11A1 (P450scc) — Initial steroid synthesis step
-  - StAR (Steroid Acute Regulatory protein) — Mitochondrial cholesterol transport
-  - 3β-HSD (3-beta-hydroxysteroid dehydrogenase) — Androgen synthesis
-- **Clinical Relevance:** Excessive ovarian/adrenal androgen production (hirsutism, acne, alopecia)
-- **Therapeutic Target:** Anti-androgens (spironolactone), oral contraceptives, CYP17 inhibitors
-
-**Pathway 4: Ovarian Dysfunction & Follicle Development**
-- **Activity Level:** 71% (high)
-- **Key Genes/Hormones:**
-  - AMH (Anti-Müllerian Hormone) — Follicle-depleting hormone
-  - FSHR (FSH Receptor) — Follicle Stimulating Hormone receptor
-  - LHCGR (LH/CG Receptor) — Luteinizing Hormone receptor
-  - BMP15 (Bone Morphogenetic Protein 15) — Follicle growth factor
-- **Clinical Relevance:** Arrested follicle development, anovulation, polycystic ovaries
-- **Therapeutic Target:** Gonadotropins, ovulation induction, surgical drilling
-
-#### Cell Type Distributions
-
-Breakdown of key ovarian/endocrine cell populations in PCOS:
-
-| Cell Type | Count | % of Total | Function |
-|-----------|-------|-----------|----------|
-| **Granulosa Cells** | 2,847 | 34% | Estrogen production, follicle support |
-| **Stromal Cells** | 3,241 | 39% | Androgen synthesis, structural support |
-| **Theca Cells** | 1,523 | 18% | Androgen & progesterone synthesis |
-| **Immune Cells** | 892 | 11% | Inflammation, immune regulation |
-| **Endothelial Cells** | 1,156 | 14% | Angiogenesis, vascular function |
-
-*Note:* PCOS shows increased stromal cell volume and inflammatory infiltrate compared to healthy ovaries.
-
-#### Pathway Visualization
-- **Interactive Diagrams** — Shows genes, proteins, and regulatory relationships
-- **Activity Heatmap** — Color intensity represents pathway activation (green: low, red: high)
-- **Legend** — Explains symbols, colors, and abbreviations
-- **Hover Details** — Click genes to see descriptions, references
-
-#### Educational Content
-- **Pathway Summaries** — One-paragraph clinical overview per pathway
-- **Gene Descriptions** — Function, expression level, associations
-- **Research References** — Links to key PCOS literature
-- **Patient Impact** — How each pathway affects symptoms and fertility
-
----
-
-## 🏗 Technical Architecture
-
-### Technology Stack
-
-**Frontend**
-- **Framework:** Next.js 16.2.6 (App Router)
-- **Runtime:** Node.js with TypeScript
-- **Styling:** Tailwind CSS, Shadcn/UI components
-- **State Management:** React hooks (useState, useEffect, useContext)
-- **API Communication:** Fetch API with custom `healthApi` client
-
-**Backend**
-- **Framework:** FastAPI (Python)
-- **Server:** Uvicorn (ASGI)
-- **ML/Prediction:** XGBoost for risk scoring, scikit-learn for clustering
-- **Explainability:** SHAP (SHapley Additive exPlanations) for feature importance
-- **Database:** Supabase (PostgreSQL) optional, localStorage default
-- **Data Processing:** Pandas for CSV parsing and manipulation
-
-**DevOps & Hosting**
-- **Version Control:** Git
-- **Environment:** Docker-ready (backend containerizable)
-- **API Gateway:** CORS-enabled for localhost:3000 ↔ localhost:8001
-
-### Directory Structure
-
-```
-frontend/
-├── backend/                          # FastAPI backend
-│   ├── main.py                      # API entry point, endpoints
-│   ├── clinical_rules.py            # Rotterdam criteria logic
-│   ├── requirements.txt             # Python dependencies
-│   ├── models/
-│   │   ├── pcos_xgboost_model.joblib     # Trained XGBoost model
-│   │   └── differential_diagnosis_model.joblib
-│   └── data/
-│       └── pcos_phenotype_results.csv    # Training dataset
-│
-├── women-s-health-diagnostic-platform/  # Next.js frontend
-│   ├── app/                         # Next.js app router
-│   │   ├── layout.tsx              # Root layout
-│   │   ├── page.tsx                # Landing page (/)
-│   │   ├── analysis/               # Patient analysis (/analysis)
-│   │   ├── body-visualization/     # Body viewer (/body-visualization)
-│   │   ├── csv-upload/             # Batch upload (/csv-upload)
-│   │   ├── molecular/              # Molecular insights (/molecular)
-│   │   ├── sessions/               # Session history (/sessions)
-│   │   └── globals.css             # Global styles
-│   │
-│   ├── components/                 # React components
-│   │   ├── analysis/               # Analysis form & results
-│   │   │   ├── patient-analysis.tsx      # Multi-step form
-│   │   │   ├── body-visualization.tsx    # Body viewer
-│   │   │   ├── results-dashboard.tsx     # Results display
-│   │   │   └── forms/                    # 6 form step components
-│   │   ├── landing/                # Landing page sections
-│   │   ├── body-viewer/            # Body visualization
-│   │   ├── molecular/              # Molecular insights
-│   │   ├── ui/                     # Shadcn UI components
-│   │   └── ...
-│   │
-│   ├── lib/
-│   │   ├── api.ts                 # API client & utilities
-│   │   └── utils.ts               # Helper functions
-│   │
-│   ├── hooks/                      # React hooks
-│   │   ├── use-toast.ts
-│   │   └── use-mobile.ts
-│   │
-│   ├── public/                     # Static assets
-│   ├── package.json               # Node dependencies
-│   ├── tsconfig.json              # TypeScript config
-│   ├── next.config.mjs            # Next.js config
-│   └── tailwind.config.ts         # Tailwind CSS config
-│
-├── supabase/                       # Backend functions (optional)
-│   ├── functions/                 # Serverless edge functions
-│   │   ├── analyze/              # PCOS analysis endpoint
-│   │   ├── predict/              # Risk prediction
-│   │   ├── shap/                 # Feature importance
-│   │   ├── cluster/              # Phenotype clustering
-│   │   ├── session/              # Session management
-│   │   └── csv-upload/           # Batch CSV processing
-│   │
-│   └── migrations/
-│       └── 20260516055037_create_patient_sessions_and_results.sql
-│
-├── notebooks/                      # Jupyter notebooks
-│   └── Biological_Validation.ipynb
-│
-├── .env.local                      # Environment variables (local)
-├── .gitignore                      # Git ignore rules
-└── README.md                       # This file
-```
-
-### API Endpoints
-
-**Backend Endpoints (`http://localhost:8001`)**
-
-| Method | Endpoint | Purpose | Input | Output |
-|--------|----------|---------|-------|--------|
-| POST | `/analyze` | Full PCOS analysis | PatientData JSON | FullAnalysisResult |
-| POST | `/predict` | Risk score prediction | PatientData JSON | RiskScore, phenotype |
-| POST | `/session` | Create/update session | SessionData JSON | SessionResult |
-| GET | `/session/{id}` | Retrieve session | — | SessionResult |
-| POST | `/csv-upload` | Batch CSV analysis | CSV file | CSVUploadResult |
-| POST | `/shap` | Feature importance | PatientData JSON | SHAPResult |
-| POST | `/cluster` | Phenotype clustering | PatientData JSON | ClusterResult |
-
-**Frontend API Client (`lib/api.ts`)**
-
-```typescript
-healthApi.analyze(patientData)           // Single-patient analysis
-healthApi.predict(patientData)           // Risk prediction only
-healthApi.csvUpload(csvFile)             // Batch upload
-healthApi.session.create(patientData)    // Create session
-healthApi.session.saveResult(...)        // Save results
-healthApi.session.list()                 // List all sessions
-healthApi.session.get(sessionId)         // Retrieve session
-```
-
----
-
-## 📊 Data Model
-
-### PatientData Object (30+ Fields)
-
-**Demographics:**
-- `age: number` — Age in years (18–50)
-- `weight: number` — Weight in kg
-- `height: number` — Height in cm
-- `bmi: number` — Body Mass Index (auto-calculated)
-- `ethnicity: string` — Ethnicity category
-
-**Menstrual Health:**
-- `cycleLength: number` — Cycle length in days
-- `cycleRegularity: string` — "regular" | "irregular"
-- `cycleVariability: number` — Variability in days
-- `periodDuration: number` — Duration in days
-- `ageAtMenarche: number` — Age at first period
-
-**Hormonal Symptoms:**
-- `acne: boolean` — Presence of acne
-- `acneSeverity: string` — "mild" | "moderate" | "severe"
-- `hirsutismScore: number` — Ferriman-Gallwey score (0–36)
-- `hairLoss: boolean` — Presence of androgenic alopecia
-- `skinDarkening: boolean` — Acanthosis nigricans
-
-**Metabolic Indicators:**
-- `fastingGlucose: number` — mg/dL
-- `fastingInsulin: number` — µIU/mL
-- `homaIR: number` — Auto-calculated insulin resistance
-- `waistCircumference: number` — cm
-- `systolicBP: number` — mmHg
-- `diastolicBP: number` — mmHg
-
-**Ultrasound Findings:**
-- `leftOvaryVolume: number` — mL
-- `rightOvaryVolume: number` — mL
-- `leftFollicleCount: number` — Number of 2–9mm follicles
-- `rightFollicleCount: number` — Number of 2–9mm follicles
-- `polycysticAppearance: boolean` — Sonographic confirmation
-- `endometrialThickness: number` — mm
-
-**Lab Biomarkers:**
-- `lh: number` — mIU/mL
-- `fsh: number` — mIU/mL
-- `lhFshRatio: number` — Auto-calculated
-- `totalTestosterone: number` — ng/dL
-- `freeTestosterone: number` — pg/mL
-- `dheas: number` — µg/dL
-- `amh: number` — ng/mL (Anti-Müllerian Hormone)
-- `prolactin: number` — ng/mL
-- `tsh: number` — mIU/L
-
-### Analysis Result Object
-
-```typescript
-{
-  success: boolean,
-  prediction: {
-    pcosRiskScore: number,              // 0–100
-    riskLevel: "low" | "moderate" | "high",
-    phenotype: {
-      type: "A" | "B" | "C" | "D",
-      name: string,
-      description: string
-    },
-    confidence: number                  // 0–100
-  },
-  Rotterdam: {
-    criteria_met: string[],             // Which of 3 criteria met
-    hyperandrogenism: boolean,
-    ovulatoryDysfunction: boolean,
-    polycysticOvaries: boolean
-  },
-  shap: {
-    values: Array<{
-      feature: string,
-      value: number,
-      impact: "high" | "moderate" | "low",
-      direction: "increase" | "neutral"
-    }>
-  },
-  clustering: {
-    cluster: number,
-    cluster_name: string,
-    confidence: number
-  },
-  confidenceMetrics: {
-    pcosClassification: number,
-    phenotypeClassification: number,
-    diagnosticCertainty: "high" | "moderate" | "low"
-  },
-  recommendations: string[]
-}
-```
-
-### SessionResult Object
-
-```typescript
-{
-  id: string,                          // UUID
-  created_at: string,                  // ISO 8601 timestamp
-  status: "active" | "archived" | "completed",
-  patientData: PatientData,
-  result: AnalysisResult,
-  csvMetadata?: {
-    fileName: string,
-    rowCount: number,
-    uploadedAt: string
-  }
-}
-```
-
----
-
-## 🔑 Key Clinical Concepts
-
-### Rotterdam Criteria (Diagnosis)
-PCOS diagnosis requires ≥2 of 3 criteria:
-1. **Hyperandrogenism** — Clinical (hirsutism, acne, alopecia) OR biochemical (elevated androgens)
-2. **Ovulatory Dysfunction** — Oligomenorrhea (>35 days) or anovulation
-3. **Polycystic Ovarian Morphology** — Ultrasound finding (≥12 follicles or volume >10 mL per ovary)
-
-### PCOS Phenotypes (4 Types)
-- **Type A (Classic):** HA + OD + PCOM (40–50% of PCOS)
-- **Type B (Non-PCO):** HA + OD (20–30%)
-- **Type C (Non-HA):** OD + PCOM (10–15%)
-- **Type D (Lean/Normo-androgenic):** PCOM + OD (5–15%)
-
-### Insulin Resistance
-- **HOMA-IR > 2.5** indicates insulin resistance
-- Formula: (Fasting Glucose × Fasting Insulin) / 405
-- Present in 50–70% of PCOS, higher metabolic risk
-
-### Feature Importance (SHAP)
-Features ranked by impact on PCOS diagnosis:
-1. Cycle length (oligomenorrhea)
-2. Follicle count (polycystic pattern)
-3. LH:FSH ratio (endocrine dysfunction)
-4. Testosterone (hyperandrogenism)
-5. HOMA-IR (insulin resistance)
-
----
-
-## 🚀 Deployment Guide
-
-### Local Development
-```bash
-# Start backend (port 8001)
-source .venv/bin/activate
-PYTHONPATH=$(pwd) python3 -m uvicorn backend.main:app --port 8001
-
-# Start frontend (port 3000)
-cd women-s-health-diagnostic-platform
-npm run dev
-```
-
-### Production Build
-```bash
-# Frontend
-cd women-s-health-diagnostic-platform
+cd /path/to/BioHackathon2026/frontend/women-s-health-diagnostic-platform
 npm run build
 npm start
-
-# Backend (Gunicorn/production ASGI server)
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker backend.main:app
 ```
 
 ### Environment Variables
-Create `.env.local` in frontend root:
+
+For local FastAPI-only mode, no Supabase variables are required.
+
+For Supabase-backed mode, create `.env.local` in `women-s-health-diagnostic-platform/`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+LOCAL_MODEL_URL=http://localhost:8001
 ```
-NEXT_PUBLIC_API_URL=http://localhost:8001
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-anon-key
+
+## Project Structure
+
+```text
+frontend/
+├── backend/
+│   ├── main.py
+│   ├── clinical_rules.py
+│   ├── requirements.txt
+│   ├── data/
+│   │   └── pcos_phenotype_results.csv
+│   └── models/
+│       ├── app.py
+│       ├── differential_diagnosis_model.joblib
+│       └── pcos_xgboost_model.joblib
+├── notebooks/
+│   └── Biological_Validation.ipynb
+├── supabase/
+│   ├── functions/
+│   │   ├── analyze/
+│   │   ├── cluster/
+│   │   ├── csv-upload/
+│   │   ├── explain/
+│   │   ├── patient-summary/
+│   │   ├── predict/
+│   │   ├── session/
+│   │   └── shap/
+│   └── migrations/
+│       └── 20260516055037_create_patient_sessions_and_results.sql
+└── women-s-health-diagnostic-platform/
+    ├── app/
+    │   ├── analysis/
+    │   ├── body-visualization/
+    │   ├── csv-upload/
+    │   ├── molecular/
+    │   ├── sessions/
+    │   ├── layout.tsx
+    │   └── page.tsx
+    ├── components/
+    │   ├── analysis/
+    │   ├── body-viewer/
+    │   ├── branding/
+    │   ├── education/
+    │   ├── landing/
+    │   ├── molecular/
+    │   └── ui/
+    ├── hooks/
+    ├── lib/
+    │   ├── api.ts
+    │   └── utils.ts
+    ├── public/
+    ├── package.json
+    └── README.md
 ```
 
----
+## Clinical Logic
 
-## 📚 Additional Resources
+### Rotterdam Criteria
 
-- **PCOS Diagnosis:** Rotterdam Criteria (2012)
-- **SHAP Documentation:** https://shap.readthedocs.io/
-- **XGBoost:** https://xgboost.readthedocs.io/
-- **Next.js Docs:** https://nextjs.org/docs
-- **FastAPI Docs:** https://fastapi.tiangolo.com/
+PCOS diagnosis is supported when at least 2 of 3 criteria are met:
 
----
+1. Hyperandrogenism.
+2. Ovulatory dysfunction.
+3. Polycystic ovarian morphology.
 
-## 📝 License & Attribution
+### Phenotypes
 
-HerOva is a hackathon project for BioHackathon 2026. All clinical algorithms follow evidence-based PCOS diagnostic criteria (Rotterdam Consensus 2012).
+- Type A: hyperandrogenism + ovulatory dysfunction + polycystic ovaries.
+- Type B: hyperandrogenism + ovulatory dysfunction, without clear PCOM.
+- Type C: hyperandrogenism + polycystic ovaries, with relatively preserved ovulation.
+- Type D: ovulatory dysfunction + polycystic ovaries, without clear hyperandrogenism.
+- Non-PCOS: fewer than 2 Rotterdam criteria.
+- PCOS unclassified: meets Rotterdam threshold but does not map cleanly to a standard phenotype.
 
----
+### Risk Contributors
 
-**Questions or Issues?** Contact the development team or open an issue in the repository.
+The local analysis backend scores signals from:
 
-Last Updated: **May 19, 2026**
+- Ovulatory dysfunction.
+- Hyperandrogenism.
+- Polycystic ovarian morphology.
+- Irregular or prolonged cycles.
+- Clinical hyperandrogenism.
+- Elevated AMH.
+- Elevated LH:FSH ratio.
+- Elevated BMI.
+- Insulin resistance signal.
+- Hormonal imbalance signal from prolactin or TSH.
+
+## Scripts
+
+Frontend scripts in `women-s-health-diagnostic-platform/package.json`:
+
+```bash
+npm run dev      # Start Next.js dev server
+npm run build    # Build production app
+npm start        # Start production server
+npm run lint     # Run ESLint
+```
+
+## Last Updated
+
+May 19, 2026
