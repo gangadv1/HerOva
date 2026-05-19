@@ -2,8 +2,12 @@
 
 import React, { useState } from "react"
 
-export function BodyVisualization({ patientData }: { patientData?: any }) {
+export function BodyVisualization({ patientData, highlights }: { patientData?: any; highlights?: { face?: boolean; abdomen?: boolean; ovary?: boolean; scalp_face?: boolean } }) {
   const [selected, setSelected] = useState<string | null>(null)
+
+  const faceOn = !!highlights?.face || !!highlights?.scalp_face
+  const abdomenOn = !!highlights?.abdomen
+  const ovaryOn = !!highlights?.ovary
 
   const regions = [
     { id: "ovaries", label: "Ovaries" },
@@ -30,7 +34,7 @@ export function BodyVisualization({ patientData }: { patientData?: any }) {
               cx="80"
               cy="160"
               r="12"
-              fill={selected === "ovaries" ? "#7c3aed" : "#fde68a"}
+              fill={ovaryOn || selected === "ovaries" ? "#a78bfa" : "#fde68a"}
               stroke="#b091ea"
               onClick={() => setSelected(selected === "ovaries" ? null : "ovaries")}
               style={{ cursor: "pointer" }}
@@ -39,7 +43,7 @@ export function BodyVisualization({ patientData }: { patientData?: any }) {
               cx="120"
               cy="160"
               r="12"
-              fill={selected === "ovaries" ? "#7c3aed" : "#fde68a"}
+              fill={ovaryOn || selected === "ovaries" ? "#a78bfa" : "#fde68a"}
               stroke="#b091ea"
               onClick={() => setSelected(selected === "ovaries" ? null : "ovaries")}
               style={{ cursor: "pointer" }}
@@ -51,7 +55,7 @@ export function BodyVisualization({ patientData }: { patientData?: any }) {
               cy="200"
               rx="28"
               ry="18"
-              fill={selected === "abdomen" ? "#06b6d4" : "#c7f9ff"}
+              fill={abdomenOn || selected === "abdomen" ? "#67e8f9" : "#c7f9ff"}
               stroke="#7dd3fc"
               onClick={() => setSelected(selected === "abdomen" ? null : "abdomen")}
               style={{ cursor: "pointer" }}
@@ -62,7 +66,7 @@ export function BodyVisualization({ patientData }: { patientData?: any }) {
               cx="100"
               cy="40"
               r="10"
-              fill={selected === "face" ? "#f97316" : "#ffe7d6"}
+              fill={faceOn || selected === "face" ? "#fb7185" : "#ffe7d6"}
               stroke="#fbbf77"
               onClick={() => setSelected(selected === "face" ? null : "face")}
               style={{ cursor: "pointer" }}

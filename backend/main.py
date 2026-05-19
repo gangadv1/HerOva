@@ -205,6 +205,134 @@ def build_shap_values(factors: list[str], score: int) -> list[dict]:
     return values, top_contributors
 
 
+def human_readable_reasoning(top_contributors: list[dict]) -> list[str]:
+    """Convert top SHAP-like contributors into short, clinical sentences."""
+    sentences = []
+    for item in top_contributors:
+        name = item.get("feature") or item.get("feature", item.get("feature", "")) or item.get("feature")
+        # fallback to 'feature' or 'feature' key differences
+        name = item.get("feature") or item.get("feature") or item.get("feature") or item.get("feature")
+        # fallback if the structure uses 'name'
+        if not name:
+            name = item.get("name") or item.get("feature") or "Feature"
+
+        value = float(item.get("contribution", 0))
+        # strength labels
+        if value >= 0.18:
+            strength = "strongly"
+        elif value >= 0.08:
+            strength = "substantially"
+        else:
+            strength = "mildly"
+
+        direction = item.get("direction", "positive")
+        if direction == "positive":
+            verb = "increased"
+        elif direction == "negative":
+            verb = "decreased"
+        else:
+            verb = "influenced"
+
+        # Clean up common names for readability
+        mapping = {
+            "Ovulatory dysfunction": "Ovulatory dysfunction",
+            "Hyperandrogenism": "Hyperandrogenism",
+            "Polycystic ovarian morphology": "Polycystic ovarian morphology",
+            "Irregular or prolonged cycles": "Irregular cycles",
+            "Clinical hyperandrogenism": "Clinical hyperandrogenism",
+            "Elevated AMH": "Elevated AMH",
+            "Elevated LH:FSH ratio": "Elevated LH:FSH ratio",
+            "Elevated BMI": "Elevated BMI",
+            "Metabolic insulin resistance signal": "Metabolic insulin resistance",
+            "Hormonal imbalance signal": "Hormonal imbalance",
+            "No strong signals": "No strong signals",
+        }
+
+        display = mapping.get(name, name)
+        sentence = f"{display} {strength} {verb} PCOS probability"
+        sentences.append(sentence)
+
+    # deduplicate while preserving order
+    seen = set()
+    unique = []
+    for s in sentences:
+        if s not in seen:
+            unique.append(s)
+            seen.add(s)
+    return unique
+
+
+def build_body_highlights(payload: dict, rotterdam_results: dict) -> dict:
+    """Map clinical signals to body visualization highlights."""
+    highlights = {
+        "face": False,
+        "abdomen": False,
+        "ovary": False,
+        "scalp_face": False,
+    }
+
+    if to_bool(payload.get("acne")) or to_number(payload.get("acneSeverity")) > 0:
+        highlights["face"] = True
+
+    insulin_flag = to_number(payload.get("insulinLevel")) >= 15 or to_number(payload.get("homaIr")) >= 2.5 or to_number(payload.get("fastingGlucose")) >= 110
+    if insulin_flag:
+        highlights["abdomen"] = True
+
+    ovarian_flag = (
+        to_bool(payload.get("polycysticAppearance"))
+        or to_number(payload.get("follicleCountLeft", 0)) >= 12
+        or to_number(payload.get("follicleCountRight", 0)) >= 12
+        or to_number(payload.get("amh", 0)) >= 4
+    )
+    if ovarian_flag:
+        highlights["ovary"] = True
+
+    hirsutism_flag = to_bool(payload.get("hirsutism")) or to_number(payload.get("hirsutismScore")) >= 8 or to_bool(payload.get("hair_growth"))
+    if hirsutism_flag:
+        highlights["scalp_face"] = True
+
+    return highlights
+
+
+def suggest_next_investigations(payload: dict, rotterdam_results: dict, risk_level: str, factors: list[str]) -> list[str]:
+    """Return a prioritized list of suggested follow-up investigations."""
+    suggestions = []
+
+    # metabolic priority
+    if to_number(payload.get("insulinLevel")) >= 15 or to_number(payload.get("homaIr")) >= 2.5 or to_number(payload.get("fastingGlucose")) >= 110 or any("Metabolic" in f for f in factors):
+        suggestions.append("fasting insulin")
+
+    # ovarian imaging
+    if to_bool(payload.get("polycysticAppearance")) or to_number(payload.get("follicleCountLeft", 0)) >= 12 or to_number(payload.get("follicleCountRight", 0)) >= 12 or to_number(payload.get("amh", 0)) >= 4:
+        suggestions.append("pelvic ultrasound")
+
+    # androgen testing
+    if to_bool(payload.get("hirsutism")) or to_number(payload.get("hirsutismScore")) >= 8 or to_number(payload.get("totalTestosterone", 0)) > 0:
+        suggestions.append("testosterone panel")
+
+    # specialist referral if high risk or Rotterdam positive
+    if rotterdam_results.get("rotterdam_positive") or risk_level == "high" or any(k in ["Ovulatory Dysfunction","Hyperandrogenism","Polycystic Ovaries"] for k in rotterdam_results.get("criteria_met", [])):
+        suggestions.append("reproductive endocrinology referral")
+
+    # baseline additions if nothing flagged
+    if not suggestions:
+        suggestions = [
+            "fasting insulin",
+            "pelvic ultrasound",
+            "testosterone panel",
+        ]
+
+    # preserve order and uniqueness
+    seen = set()
+    ordered = []
+    for s in suggestions:
+        if s not in seen:
+            ordered.append(s)
+            seen.add(s)
+
+    return ordered
+
+
 def build_cluster_result(phenotype: dict, risk_level: str, factors: list[str]) -> dict:
     name = phenotype.get("name", "Non-PCOS")
     description = phenotype.get("description", "Clinical phenotype")
@@ -321,6 +449,14 @@ def analyze(data: dict):
         recommendations.append("Correlate with ultrasound findings and ovarian morphology.")
     if not recommendations:
         recommendations.append("No strong PCOS pattern detected; continue routine clinical review.")
+    # Build human-readable AI reasoning sentences
+    human_reasoning = human_readable_reasoning(top_contributors)
+
+    # Body visualization highlights
+    body_highlights = build_body_highlights(payload, rotterdam_results)
+
+    # Suggested clinical next investigations
+    suggested_investigations = suggest_next_investigations(payload, rotterdam_results, risk_level, factors)
 
     return {
         "success": True,
@@ -344,6 +480,9 @@ def analyze(data: dict):
             "values": shap_values,
             "topContributors": top_contributors,
         },
+        "humanReasoning": human_reasoning,
+        "bodyHighlights": body_highlights,
+        "suggestedInvestigations": suggested_investigations,
         "clustering": cluster_result,
         "confidenceMetrics": confidence_metrics,
         "recommendations": recommendations,

@@ -206,11 +206,18 @@ const defaultSymptoms: SymptomHotspot[] = [
 interface InteractiveBodyViewerProps {
   symptoms?: SymptomHotspot[];
   onSymptomSelect?: (symptom: SymptomHotspot) => void;
+  highlights?: {
+    face?: boolean;
+    abdomen?: boolean;
+    ovary?: boolean;
+    scalp_face?: boolean;
+  };
 }
 
 export function InteractiveBodyViewer({
   symptoms = defaultSymptoms,
   onSymptomSelect,
+  highlights,
 }: InteractiveBodyViewerProps) {
   const [selectedSymptom, setSelectedSymptom] = useState<SymptomHotspot | null>(null);
   const [hoveredSymptom, setHoveredSymptom] = useState<string | null>(null);
@@ -361,6 +368,33 @@ export function InteractiveBodyViewer({
                   </feMerge>
                 </filter>
               </defs>
+
+              {/* Programmatic highlights from AI reasoning */}
+              {((highlights && highlights.face) ?? false) && (
+                <g filter="url(#hotspotGlow)" opacity="0.9">
+                  <circle cx={200} cy={95} r={70} fill="rgba(236,72,153,0.12)" stroke="rgba(236,72,153,0.32)" strokeWidth={1.5} />
+                </g>
+              )}
+
+              {((highlights && highlights.abdomen) ?? false) && (
+                <g filter="url(#hotspotGlow)" opacity="0.9">
+                  <ellipse cx={200} cy={320} rx={100} ry={60} fill="rgba(34,211,238,0.12)" stroke="rgba(34,211,238,0.28)" strokeWidth={1.5} />
+                </g>
+              )}
+
+              {((highlights && highlights.ovary) ?? false) && (
+                <g filter="url(#hotspotGlow)" opacity="0.95">
+                  <ellipse cx={160} cy={400} rx={22} ry={14} fill="rgba(168,85,247,0.14)" stroke="rgba(168,85,247,0.32)" strokeWidth={1.2} />
+                  <ellipse cx={240} cy={400} rx={22} ry={14} fill="rgba(168,85,247,0.14)" stroke="rgba(168,85,247,0.32)" strokeWidth={1.2} />
+                </g>
+              )}
+
+              {((highlights && highlights.scalp_face) ?? false) && (
+                <g filter="url(#hotspotGlow)" opacity="0.85">
+                  <circle cx={200} cy={45} r={54} fill="rgba(168,85,247,0.08)" stroke="rgba(168,85,247,0.26)" strokeWidth={1} />
+                  <circle cx={200} cy={95} r={54} fill="rgba(236,72,153,0.06)" stroke="rgba(236,72,153,0.2)" strokeWidth={1} />
+                </g>
+              )}
 
               {/* Elegant Female Body Silhouette - Clean anatomical outline */}
               <g filter="url(#bodyGlow)">

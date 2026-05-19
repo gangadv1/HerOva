@@ -15,6 +15,8 @@ interface FeatureImportanceItem {
 
 interface FeatureImportanceProps {
   features?: FeatureImportanceItem[]
+  humanReasoning?: string[]
+  suggestedInvestigations?: string[]
 }
 
 export function FeatureImportance({
@@ -76,6 +78,8 @@ export function FeatureImportance({
       threshold: "Clinical hyperandrogenism",
     },
   ],
+  humanReasoning = [],
+  suggestedInvestigations = [],
 }: FeatureImportanceProps) {
   const getImpactColor = (impact: string) => {
     switch (impact) {
@@ -103,61 +107,40 @@ export function FeatureImportance({
 
   return (
     <Card className="glass border-teal-500/30 p-6">
-      <div className="mb-6">
+      <div className="mb-4">
         <div className="flex items-center gap-2 mb-2">
           <TrendingUp className="w-5 h-5 text-teal-400" />
-          <h3 className="text-xl font-bold text-foreground">Feature Importance (SHAP Analysis)</h3>
+          <h3 className="text-xl font-bold text-foreground">AI Reasoning Summary</h3>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Top contributing factors ranked by impact on PCOS risk score
-        </p>
+        <p className="text-sm text-muted-foreground">Human-readable summary of top model drivers</p>
       </div>
 
       <div className="space-y-2.5">
-        {features.map((feature, idx) => (
-          <div key={idx} className="bg-slate-900/40 border border-slate-700/50 rounded-lg p-3 hover:border-teal-500/50 transition-colors">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg font-bold text-teal-400">{idx + 1}.</span>
-                  <span className="font-semibold text-foreground text-sm">{feature.feature}</span>
-                  <Badge className={`${getImpactColor(feature.impact)} border`} variant="secondary">
-                    {feature.impact.charAt(0).toUpperCase() + feature.impact.slice(1)}
-                  </Badge>
-                </div>
-                {feature.threshold && (
-                  <p className="text-xs text-muted-foreground ml-7">{feature.threshold}</p>
-                )}
+        {humanReasoning.length > 0 ? (
+          humanReasoning.map((line, idx) => (
+            <div key={idx} className="bg-slate-900/30 border border-slate-700/40 rounded-lg p-3">
+              <div className="flex items-center gap-2">
+                <span className="text-lg font-bold text-teal-400">{idx + 1}.</span>
+                <span className="text-sm text-foreground">{line}</span>
               </div>
-              <span className="text-lg font-bold text-pink-400 flex-shrink-0">
-                {getDirectionIcon(feature.direction)}
-              </span>
             </div>
-
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-teal-500 to-cyan-400 rounded-full"
-                  style={{ width: `${feature.value * 100}%` }}
-                />
-              </div>
-              <span className="text-xs font-mono text-slate-600 flex-shrink-0 w-8 text-right">
-                {(feature.value * 100).toFixed(0)}
-              </span>
-            </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <div className="text-sm text-muted-foreground">No human-readable reasoning available.</div>
+        )}
       </div>
 
-      <div className="mt-6 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-        <div className="text-xs text-slate-700 space-y-1">
-          <strong className="text-orange-900 block mb-1">📊 Interpretation:</strong>
-          <p>
-            The model identifies <strong>cycle length, follicle count, and hormonal ratios</strong> as the strongest
-            predictors of PCOS. These correspond directly to Rotterdam diagnostic criteria components, confirming that
-            the AI model captures clinically meaningful patterns in women's endocrine health data.
-          </p>
-        </div>
+      <div className="mt-6 p-4 bg-background/60 border border-border/30 rounded-lg">
+        <h4 className="text-sm font-semibold text-foreground mb-2">Recommended follow-up</h4>
+        {suggestedInvestigations.length > 0 ? (
+          <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
+            {suggestedInvestigations.map((rec, idx) => (
+              <li key={idx}>{rec}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">No specific follow-up suggested.</p>
+        )}
       </div>
     </Card>
   )

@@ -766,6 +766,9 @@ export interface FullAnalysisResult {
     summary?: string;
   };
   nextInvestigations?: string[];
+  humanReasoning?: string[];
+  bodyHighlights?: { face?: boolean; abdomen?: boolean; ovary?: boolean; scalp_face?: boolean };
+  suggestedInvestigations?: string[];
   rotterdamEvaluation: RotterdamEvaluation;
   shap: {
     values: Array<{
