@@ -10,6 +10,7 @@ import { ParticleBackground } from "@/components/landing/particle-background"
 import { FlyingButterflies } from "@/components/landing/flying-butterflies"
 import HomeSections from "@/components/landing/home-sections"
 import PublicHealthSection from "@/components/landing/public-health-section"
+import { InnovationSection } from "@/components/landing/innovation-section"
 import { Card } from "@/components/ui/card"
 
 export default function Home() {
@@ -26,6 +27,8 @@ export default function Home() {
       <HeroSection />
 
       <ProblemSection />
+
+      <InnovationSection />
 
       <FeaturesSection />
 

@@ -772,6 +772,55 @@ export function ResultsDashboard({ patientData, onBack }: ResultsDashboardProps)
           </motion.div>
         </div>
 
+        {/* Innovation lens — signals considered */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.33 }} className="mb-6">
+          <Card className="glass border-cyan-500/10 p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-1">Multi-Signal Synthesis</p>
+                <p className="text-sm text-muted-foreground">
+                  This risk view is formed by synthesising up to <strong className="text-foreground">six clinical domains</strong> simultaneously — not a single test or symptom checklist. Each domain contributes a weighted signal to the overall score and phenotype assignment below.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 sm:flex-nowrap sm:gap-1.5 flex-shrink-0">
+                {[
+                  { label: "Demographics", active: true, color: "purple" },
+                  { label: "Menstrual", active: true, color: "purple" },
+                  { label: "Symptoms", active: true, color: "purple" },
+                  {
+                    label: "Metabolic",
+                    active: patientData.fastingGlucose !== 95 || patientData.insulinLevel !== 12 || patientData.waistCircumference !== 80,
+                    color: "cyan",
+                  },
+                  {
+                    label: "Ultrasound",
+                    active: patientData.follicleCountLeft !== 10 || patientData.follicleCountRight !== 12 || patientData.polycysticAppearance,
+                    color: "cyan",
+                  },
+                  {
+                    label: "Lab Biomarkers",
+                    active: patientData.lh !== 10 || patientData.totalTestosterone !== 45 || patientData.amh !== 4.5,
+                    color: "cyan",
+                  },
+                ].map((sig) => (
+                  <span
+                    key={sig.label}
+                    className={`text-xs px-2 py-1 rounded-full border font-medium whitespace-nowrap ${
+                      sig.active
+                        ? sig.color === "purple"
+                          ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                          : "bg-cyan-500/20 text-cyan-300 border-cyan-500/30"
+                        : "bg-zinc-800/50 text-zinc-500 border-zinc-700/50"
+                    }`}
+                  >
+                    {sig.active ? "✓ " : "– "}{sig.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.34 }} className="mb-8">
           <Card className="glass border-purple-500/20 p-6">
             <div className="flex items-center justify-between gap-4 mb-4">
