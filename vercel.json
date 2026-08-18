@@ -1,7 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs",
-  "installCommand": "npm install --prefix women-s-health-diagnostic-platform",
-  "buildCommand": "npm run build --prefix women-s-health-diagnostic-platform",
-  "outputDirectory": "women-s-health-diagnostic-platform/.next"
+  "framework": "nextjs"
 }
